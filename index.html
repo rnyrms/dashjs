@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>dashjs demo</title>
+    <link rel="stylesheet" href="/node_modules/jsuites/dist/jsuites.css" />
+    <link rel="stylesheet" href="/node_modules/jspreadsheet/dist/jspreadsheet.css" />
+    <link rel="stylesheet" href="/node_modules/gridstack/dist/gridstack.css" />
+    <link rel="stylesheet" href="/src/styles/dashjs.css" />
+    <style>
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: flex;
+        flex-direction: column;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        background: #fafaf9;
+      }
+      header {
+        flex-shrink: 0;
+        padding: 12px 24px;
+        background: #fff;
+        border-bottom: 1px solid #e5e5e3;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      header h1 { font-size: 14px; font-weight: 600; margin: 0; }
+      header small { color: #79786f; font-size: 11px; }
+      #app {
+        flex: 1;
+        display: flex;
+        background: #fff;
+        min-height: 0;
+      }
+      .demo-controls { display: flex; gap: 8px; }
+      .demo-controls button {
+        padding: 6px 10px;
+        border: 1px solid #e5e5e3;
+        background: #fff;
+        border-radius: 6px;
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .demo-controls button:hover { background: #f0efed; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>dashjs</h1>
+        <small>vanilla TS · LemonadeJS · jSuites · Jspreadsheet · Lucide · Highcharts</small>
+      </div>
+      <div class="demo-controls">
+        <button id="mode-toggle">Switch to view mode</button>
+        <button id="theme-toggle">Toggle theme</button>
+      </div>
+    </header>
+    <div id="app"></div>
+    <script type="module" src="/demo/main.ts"></script>
+  </body>
+</html>

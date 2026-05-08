@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.vite/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.log
+*.tmp
+
+# Internal — DO NOT COMMIT.
+# `legacy/` is the React port copied from the private tabularpro app and is
+# kept locally for diff/reference only.
+legacy/

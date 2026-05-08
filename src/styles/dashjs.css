@@ -1,0 +1,797 @@
+/* dashjs — base styles. Scoped under [data-dashjs] root attribute. */
+
+[data-dashjs] {
+  /* Color tokens — overridable via [data-dashjs-theme="dark"] */
+  --dashjs-bg: #ffffff;
+  --dashjs-bg-subtle: #f7f7f6;
+  --dashjs-bg-hover: #f0efed;
+  --dashjs-border: #e5e5e3;
+  --dashjs-text: #2f2f2f;
+  --dashjs-text-muted: #79786f;
+  --dashjs-accent: #2383e2;
+  --dashjs-accent-hover: #1a6dc1;
+  --dashjs-danger: #d44c47;
+
+  /* Sizing */
+  --dashjs-radius: 6px;
+  --dashjs-spacing: 12px;
+
+  /* Typography — let the host app's body font cascade through; only nudge size. */
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--dashjs-text);
+  background: var(--dashjs-bg);
+  box-sizing: border-box;
+}
+
+[data-dashjs][data-dashjs-theme='dark'] {
+  --dashjs-bg: #1f1f1f;
+  --dashjs-bg-subtle: #2a2a2a;
+  --dashjs-bg-hover: #353535;
+  --dashjs-border: #3a3a3a;
+  --dashjs-text: #e8e6e3;
+  --dashjs-text-muted: #a3a39a;
+  --dashjs-accent: #4f97e3;
+  --dashjs-accent-hover: #6da9e8;
+  --dashjs-danger: #e57773;
+}
+
+[data-dashjs] * {
+  box-sizing: border-box;
+}
+
+/* List page */
+.dashjs-list {
+  padding: 24px;
+  min-height: 100%;
+}
+
+.dashjs-list__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.dashjs-list__title {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.dashjs-list__subtitle {
+  color: var(--dashjs-text-muted);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+/* Buttons */
+.dashjs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--dashjs-border);
+  border-radius: var(--dashjs-radius);
+  background: var(--dashjs-bg);
+  color: var(--dashjs-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.dashjs-btn:hover {
+  background: var(--dashjs-bg-hover);
+}
+.dashjs-btn--primary {
+  background: var(--dashjs-accent);
+  border-color: var(--dashjs-accent);
+  color: #fff;
+}
+.dashjs-btn--primary:hover {
+  background: var(--dashjs-accent-hover);
+  border-color: var(--dashjs-accent-hover);
+}
+.dashjs-btn--icon {
+  padding: 6px;
+  border: none;
+  background: transparent;
+  color: var(--dashjs-text-muted);
+}
+.dashjs-btn--icon:hover {
+  color: var(--dashjs-text);
+  background: var(--dashjs-bg-hover);
+}
+
+/* Forms */
+.dashjs-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px;
+}
+.dashjs-form__row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dashjs-form__label {
+  font-size: 12px;
+  color: var(--dashjs-text-muted);
+}
+.dashjs-form__input {
+  padding: 8px 10px;
+  border: 1px solid var(--dashjs-border);
+  border-radius: var(--dashjs-radius);
+  background: var(--dashjs-bg);
+  color: var(--dashjs-text);
+  font: inherit;
+  font-size: 13px;
+}
+.dashjs-form__input:focus {
+  outline: none;
+  border-color: var(--dashjs-accent);
+}
+.dashjs-form__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+/* Empty state */
+.dashjs-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--dashjs-text-muted);
+}
+
+/* Jspreadsheet container — the table renders inside this. */
+.dashjs-table {
+  border: 1px solid var(--dashjs-border);
+  border-radius: var(--dashjs-radius);
+  overflow: hidden;
+}
+
+/* ====================================================================
+   EDITOR
+   Looker-Studio-inspired layout: menu / toolbar / filter bar / body.
+   Body = canvas | panel (slide-in) | rail.
+==================================================================== */
+
+.dashjs-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 720px;
+}
+
+/* --- Menu bar ------------------------------------------------------- */
+.dashjs-editor__menubar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--dashjs-border);
+  background: var(--dashjs-bg);
+  font-size: 13px;
+}
+.dashjs-editor__menubtn {
+  border: 0;
+  background: transparent;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--dashjs-text);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.dashjs-editor__menubtn:hover:not(:disabled) {
+  background: var(--dashjs-bg-hover);
+}
+.dashjs-editor__menubtn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* --- Toolbar -------------------------------------------------------- */
+.dashjs-editor__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--dashjs-border);
+  background: var(--dashjs-bg);
+  flex-wrap: wrap;
+}
+.dashjs-editor__sep {
+  width: 1px;
+  height: 20px;
+  background: var(--dashjs-border);
+  margin: 0 4px;
+}
+.dashjs-editor__spacer { flex: 1; }
+.dashjs-editor__pagelabel {
+  font-size: 12px;
+  color: var(--dashjs-text-muted);
+  padding: 0 4px;
+  white-space: nowrap;
+}
+.dashjs-editor__tbbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--dashjs-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dashjs-editor__tbbtn:hover:not(:disabled) {
+  background: var(--dashjs-bg-hover);
+}
+.dashjs-editor__tbbtn--icon {
+  padding: 5px;
+  color: var(--dashjs-text-muted);
+}
+.dashjs-editor__tbbtn--icon:hover { color: var(--dashjs-text); }
+.dashjs-editor__tbbtn--primary {
+  color: var(--dashjs-accent);
+  font-weight: 500;
+}
+
+/* --- Filter bar ----------------------------------------------------- */
+.dashjs-editor__filterbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--dashjs-border);
+  background: var(--dashjs-bg-subtle);
+  min-height: 38px;
+}
+.dashjs-editor__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--dashjs-border);
+  border-radius: 999px;
+  background: var(--dashjs-bg);
+  font: inherit;
+  font-size: 12px;
+  color: var(--dashjs-text);
+  cursor: pointer;
+}
+.dashjs-editor__chip:hover { background: var(--dashjs-bg-hover); }
+.dashjs-editor__chip--add {
+  color: var(--dashjs-accent);
+  border-color: var(--dashjs-accent);
+}
+.dashjs-editor__chip--ghost {
+  border-color: transparent;
+  color: var(--dashjs-text-muted);
+}
+.dashjs-editor__chip-x {
+  display: inline-flex;
+  margin-left: 4px;
+  opacity: 0.6;
+}
+.dashjs-editor__chip-x:hover { opacity: 1; }
+
+/* --- Body: canvas + panel + rail ----------------------------------- */
+.dashjs-editor__body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.dashjs-editor__canvas {
+  flex: 1;
+  overflow: auto;
+  background: var(--dashjs-bg-subtle);
+}
+.dashjs-canvas__inner {
+  max-width: 1200px;
+  margin: 24px auto;
+  padding: 0 24px;
+}
+.dashjs-canvas__header {
+  margin-bottom: 16px;
+}
+.dashjs-canvas__title {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0;
+}
+.dashjs-canvas__subtitle {
+  color: var(--dashjs-text-muted);
+  font-size: 13px;
+  margin-top: 2px;
+}
+/* gridstack overrides — match dashjs visual tokens. */
+[data-dashjs] .grid-stack {
+  background: transparent;
+}
+[data-dashjs] .grid-stack-item {
+  cursor: grab;
+}
+[data-dashjs] .grid-stack-item-content {
+  background: var(--dashjs-bg);
+  border: 1px solid var(--dashjs-border);
+  border-radius: var(--dashjs-radius);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dashjs-card__inner {
+  height: 100%;
+}
+.dashjs-card--chart {
+  transition: box-shadow 120ms ease;
+}
+.dashjs-card--chart .grid-stack-item-content:hover {
+  border-color: var(--dashjs-text-muted);
+}
+.dashjs-card--chart.is-selected .grid-stack-item-content {
+  border-color: var(--dashjs-accent);
+  box-shadow: 0 0 0 2px var(--dashjs-accent);
+}
+.dashjs-card__body[data-chart-body] {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding: 8px 12px;
+  min-height: 0;
+}
+.dashjs-card__body[data-chart-body] > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/* KPI card content */
+.dashjs-kpi {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+}
+.dashjs-kpi__value {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--dashjs-text);
+  line-height: 1.1;
+}
+.dashjs-kpi__label {
+  font-size: 12px;
+  color: var(--dashjs-text-muted);
+  margin-top: 6px;
+}
+
+.dashjs-chart__placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--dashjs-text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Page tabs at the bottom of the canvas (Jspreadsheet-style worksheet tabs). */
+.dashjs-pagetabs {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 24px;
+  margin-top: 16px;
+  border-top: 1px solid var(--dashjs-border);
+  background: var(--dashjs-bg);
+}
+.dashjs-pagetab {
+  border: 1px solid var(--dashjs-border);
+  background: var(--dashjs-bg-subtle);
+  color: var(--dashjs-text-muted);
+  padding: 5px 14px;
+  font: inherit;
+  font-size: 12px;
+  border-radius: 4px 4px 0 0;
+  border-bottom: 0;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+  margin-bottom: -1px;
+}
+.dashjs-pagetab:hover {
+  background: var(--dashjs-bg-hover);
+  color: var(--dashjs-text);
+}
+.dashjs-pagetab.is-active {
+  background: var(--dashjs-bg);
+  color: var(--dashjs-accent);
+  border-bottom: 1px solid var(--dashjs-bg);
+  font-weight: 500;
+}
+.dashjs-pagetab--add {
+  background: transparent;
+  border: 0;
+  color: var(--dashjs-text-muted);
+  padding: 5px 8px;
+}
+.dashjs-pagetab--add:hover {
+  color: var(--dashjs-accent);
+  background: var(--dashjs-bg-hover);
+}
+
+@media (max-width: 900px) {
+  .dashjs-canvas__grid { grid-template-columns: 1fr; }
+  .dashjs-card--chart { grid-column: span 1 !important; }
+}
+
+/* Panels — slide in independently. Each panel's width is 0 when closed,
+   320px when open. Order in the body: canvas | properties | data | rail.
+   So Properties sits between canvas and Data, matching the Looker layout. */
+.dashjs-editor__panel {
+  width: 0;
+  flex-shrink: 0;
+  background: var(--dashjs-bg);
+  overflow: hidden;
+  border-left: 1px solid transparent;
+  transition: width 200ms ease, border-color 200ms ease;
+}
+.dashjs-editor__panel[aria-hidden='false'] {
+  width: 320px;
+  border-left-color: var(--dashjs-border);
+}
+
+/* Rail — vertical icon column on the far right */
+.dashjs-editor__rail {
+  width: 64px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 8px 6px;
+  border-left: 1px solid var(--dashjs-border);
+  background: var(--dashjs-bg);
+  gap: 4px;
+}
+.dashjs-editor__railbtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--dashjs-text-muted);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.dashjs-editor__railbtn:hover { background: var(--dashjs-bg-hover); color: var(--dashjs-text); }
+.dashjs-editor__railbtn.is-active {
+  background: var(--dashjs-bg-hover);
+  color: var(--dashjs-accent);
+}
+.dashjs-editor__raillabel {
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* --- Panel content ------------------------------------------------- */
+.dashjs-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 320px;
+}
+.dashjs-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--dashjs-border);
+  font-weight: 600;
+  font-size: 13px;
+}
+.dashjs-panel__title {
+  flex: 1;
+}
+.dashjs-panel__search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--dashjs-border);
+  color: var(--dashjs-text-muted);
+}
+.dashjs-panel__searchinput {
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--dashjs-text);
+}
+.dashjs-panel__source {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--dashjs-border);
+  font-size: 13px;
+  font-weight: 500;
+}
+.dashjs-panel__sourceicon { color: var(--dashjs-accent); display: inline-flex; }
+.dashjs-panel__empty {
+  padding: 24px 16px;
+  color: var(--dashjs-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.dashjs-fieldlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+.dashjs-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px;
+  font-size: 13px;
+  cursor: grab;
+}
+.dashjs-field:hover { background: var(--dashjs-bg-hover); }
+.dashjs-field__badge {
+  display: inline-block;
+  width: 28px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  flex-shrink: 0;
+}
+.dashjs-field__name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Popovers (anchored panels — Add a chart, future: Add a control, etc.) */
+.dashjs-popover {
+  background: var(--dashjs-bg);
+  color: var(--dashjs-text);
+  border: 1px solid var(--dashjs-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 12px;
+  min-width: 280px;
+}
+.dashjs-popover__title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.dashjs-popover .dashjs-typegrid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* Toolbar button "active" state when its popover is open */
+.dashjs-editor__tbbtn.is-active {
+  background: var(--dashjs-bg-hover);
+  color: var(--dashjs-accent);
+}
+
+/* Properties tabs (Setup / Style) */
+.dashjs-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--dashjs-border);
+}
+.dashjs-tabs__btn {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--dashjs-text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.dashjs-tabs__btn.is-active {
+  color: var(--dashjs-accent);
+  border-bottom-color: var(--dashjs-accent);
+  font-weight: 500;
+}
+.dashjs-tabs__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Properties form */
+.dashjs-props {
+  padding: 14px 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+.dashjs-props__section {
+  margin-bottom: 16px;
+}
+.dashjs-props__label {
+  display: block;
+  font-size: 12px;
+  color: var(--dashjs-text-muted);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+/* Type tile grid (chart type picker inside Properties) */
+.dashjs-typegrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.dashjs-typetile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 4px;
+  border: 1px solid var(--dashjs-border);
+  background: var(--dashjs-bg);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--dashjs-text-muted);
+  cursor: pointer;
+}
+.dashjs-typetile:hover {
+  border-color: var(--dashjs-text-muted);
+  color: var(--dashjs-text);
+}
+.dashjs-typetile.is-active {
+  border-color: var(--dashjs-accent);
+  background: rgba(35, 131, 226, 0.08);
+  color: var(--dashjs-accent);
+}
+.dashjs-typetile__icon { display: inline-flex; }
+
+/* Inline chips for chart-level filter list inside Properties */
+.dashjs-editor__chip--inline {
+  font-size: 11px;
+  padding: 3px 8px;
+  background: var(--dashjs-bg-subtle);
+}
+.dashjs-props__chiplist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.dashjs-props__chiplist:empty {
+  display: none;
+}
+
+/* Form helpers */
+.dashjs-form__hint {
+  color: var(--dashjs-text-muted);
+  font-weight: normal;
+}
+
+/* Danger button */
+.dashjs-btn--danger {
+  border-color: var(--dashjs-danger);
+  color: var(--dashjs-danger);
+  background: var(--dashjs-bg);
+}
+.dashjs-btn--danger:hover {
+  background: var(--dashjs-danger);
+  color: #fff;
+  border-color: var(--dashjs-danger);
+}
+
+/* Screen-reader only utility */
+.dashjs-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+/* ====================================================================
+   VIEWER PAGE  (read-only)
+==================================================================== */
+/* Viewer page */
+.dashjs-viewer {
+  padding: 24px;
+}
+.dashjs-viewer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.dashjs-viewer__title {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0;
+}
+.dashjs-viewer__subtitle {
+  color: var(--dashjs-text-muted);
+  font-size: 13px;
+  margin-top: 2px;
+}
+.dashjs-viewer__actions {
+  display: flex;
+  gap: 4px;
+}
+.dashjs-viewer__grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr 1fr;
+}
+@media (max-width: 900px) {
+  .dashjs-viewer__grid { grid-template-columns: 1fr; }
+}
+
+/* Card — generic container for a chart or table inside the viewer */
+.dashjs-card {
+  border: 1px solid var(--dashjs-border);
+  border-radius: var(--dashjs-radius);
+  background: var(--dashjs-bg);
+  overflow: hidden;
+}
+.dashjs-card__title {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--dashjs-border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dashjs-text);
+}
+.dashjs-card__body {
+  padding: 12px;
+  min-height: 320px;
+}
+
+/* Inline create form below the table */
+.dashjs-create {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--dashjs-border);
+  border-radius: var(--dashjs-radius);
+  background: var(--dashjs-bg-subtle);
+}
+.dashjs-create__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dashjs-text);
+  margin-bottom: 10px;
+}
+.dashjs-create__row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.dashjs-create__input {
+  flex: 1;
+}
