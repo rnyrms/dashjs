@@ -162,6 +162,12 @@
 .dashjs-editor {
   display: flex;
   flex-direction: column;
+  /* Fill the host element on both axes — the host is typically a flex
+     child or has explicit dimensions. `flex: 1` covers the flex-host case
+     (e.g. demo's `#app { display: flex }`), `width: 100%` covers a plain
+     block host, `height: 100%` covers explicit-height hosts. */
+  flex: 1;
+  width: 100%;
   height: 100%;
   min-height: 720px;
 }
@@ -317,8 +323,7 @@
   border-top: 1px solid var(--dashjs-border);
 }
 .dashjs-canvas__inner {
-  max-width: 1200px;
-  margin: 24px auto;
+  margin: 24px 0;
   padding: 0 24px 24px;
 }
 .dashjs-canvas__header {
@@ -343,8 +348,9 @@
 }
 /* Higher-specificity match to defeat gridstack's
    `.grid-stack > .grid-stack-item > .grid-stack-item-content` selector
-   (0,3,0) — without this gridstack would set overflow-y: auto and the
-   resulting scrollbar would visually crop the bottom border. */
+   (0,3,0). We also force the inset on all four sides here rather than
+   relying on gridstack's `margin` option — that option produced uneven
+   vertical vs horizontal gaps in v12, so this is the source of truth. */
 [data-dashjs] .grid-stack > .grid-stack-item > .grid-stack-item-content {
   background: var(--dashjs-bg);
   border: 1px solid var(--dashjs-border);
@@ -352,6 +358,10 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  top: 6px;
+  right: 6px;
+  bottom: 6px;
+  left: 6px;
 }
 /* Chart cards: the box-shadow selection ring lives just outside the
    inner item-content. The outer item carries `.dashjs-card` whose
@@ -363,9 +373,10 @@
   background: transparent;
   border: 0;
 }
-.dashjs-card__inner {
-  height: 100%;
-}
+/* Note: deliberately no `height: 100%` here. The inner is positioned
+   absolutely with explicit top/right/bottom/left from the gridstack
+   override above, so `height: 100%` would override the bottom inset and
+   make the vertical gap collapse to 0. */
 .dashjs-card--chart {
   transition: box-shadow 120ms ease;
 }
@@ -569,7 +580,14 @@
   font-size: 13px;
   font-weight: 500;
 }
-.dashjs-panel__sourceicon { color: var(--dashjs-accent); display: inline-flex; }
+.dashjs-panel__sourceicon { color: var(--dashjs-accent); display: inline-flex; flex-shrink: 0; }
+.dashjs-panel__sourcelabel {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .dashjs-panel__empty {
   padding: 24px 16px;
   color: var(--dashjs-text-muted);

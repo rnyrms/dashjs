@@ -10,6 +10,7 @@ import { renderChart, type ChartHandle } from '../charts/renderChart'
 import { createDefaultChart } from '../charts/defaults'
 import { applyFilters } from '../charts/applyFilters'
 import { DEFAULT_PALETTE, paletteFor } from '../charts/palette'
+import { parseCsv } from '../charts/csv'
 import { icon } from '../icons'
 import { MOCK_FIELDS, fieldTypeBadge } from '../mockData'
 
@@ -97,7 +98,7 @@ export class DashboardEditor {
   private selectedChartId: number | null = null
   private activePageId: number
   private grid: GridStack | null = null
-  private panels: PanelState = { data: true, properties: false }
+  private panels: PanelState = { data: false, properties: false }
   private fieldQuery = ''
   private addChartOpen = false
   private isDirty = false
@@ -110,6 +111,10 @@ export class DashboardEditor {
   /** Per-chart fetch tokens so stale getChartData responses can't overwrite
    *  a newer render after the user changes the chart's config quickly. */
   private chartFetchTokens = new Map<number, number>()
+  /** Uploaded CSV — when present, replaces both the field catalogue and the
+   *  source of chart data. Aggregations are computed client-side from the
+   *  rows on every (re)render. */
+  private csvData: { rows: Record<string, string>[]; fileName: string } | null = null
   /** Bound listener so we can remove it cleanly when the popover closes. */
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null
   private escKeyHandler: ((e: KeyboardEvent) => void) | null = null
@@ -397,6 +402,9 @@ export class DashboardEditor {
 
   private renderDataPanel(t: (k: string, f: string) => string): string {
     const fields = this.filteredFields()
+    const sourceLabel = this.csvData
+      ? `${escape(this.csvData.fileName)} · ${this.csvData.rows.length} rows`
+      : escape(this.dashboard.survey_name ?? 'Mock data')
     return `
       <div class="dashjs-panel">
         <div class="dashjs-panel__header">
@@ -415,7 +423,7 @@ export class DashboardEditor {
         </div>
         <div class="dashjs-panel__source">
           <div class="dashjs-panel__sourceicon">${icon('chart', { size: 14 })}</div>
-          <span>${escape(this.dashboard.survey_name ?? 'Data source')}</span>
+          <span class="dashjs-panel__sourcelabel">${sourceLabel}</span>
         </div>
         <ul class="dashjs-fieldlist">
           ${fields.map(this.renderField).join('')}
@@ -741,6 +749,12 @@ export class DashboardEditor {
       this.save()
     })
 
+    // "Add data" → CSV file picker. For now CSV is the only supported source;
+    // future iterations could open a popover offering CSV / JSON / connect-API.
+    this.root.querySelector<HTMLButtonElement>('[data-tb="add-data"]')?.addEventListener('click', () => {
+      this.openCsvUpload()
+    })
+
     this.attachFilterBarEvents()
   }
 
@@ -952,6 +966,46 @@ export class DashboardEditor {
           .forEach((c) => c.classList.remove('is-drop-target'))
       })
     })
+  }
+
+  /** Open a one-shot native file picker for CSV upload. Triggered by the
+   *  toolbar "Add data" button — no persistent hidden input in the DOM. */
+  private openCsvUpload(): void {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.csv,text/csv'
+    input.addEventListener('change', () => {
+      const file = input.files?.[0]
+      if (file) void this.loadCsvFile(file)
+    })
+    input.click()
+  }
+
+  /** Read + parse an uploaded CSV file, then take it as the new data source:
+   *  field catalogue from the header row, chart series computed from the
+   *  rows on every render. Surface a friendly error on parse failure. */
+  private async loadCsvFile(file: File): Promise<void> {
+    try {
+      const text = await file.text()
+      const { fields, rows } = parseCsv(text)
+      if (fields.length === 0 || rows.length === 0) {
+        console.warn('[dashjs] CSV is empty or malformed')
+        return
+      }
+      this.csvData = { rows, fileName: file.name }
+      this.fields = fields
+      this.refreshPanels()
+      this.rerenderAllCharts()
+    } catch (err) {
+      console.error('[dashjs] CSV upload failed', err)
+    }
+  }
+
+  private clearCsv(): void {
+    this.csvData = null
+    this.fields = MOCK_FIELDS
+    this.refreshPanels()
+    this.rerenderAllCharts()
   }
 
   private attachFieldSearch(): void {
@@ -1218,6 +1272,15 @@ export class DashboardEditor {
     const token = (this.chartFetchTokens.get(id) ?? 0) + 1
     this.chartFetchTokens.set(id, token)
 
+    // CSV path — recompute series from the uploaded rows. Takes precedence
+    // over both the host's dataSource and embedded series so the user can
+    // experiment with their own data without wiring up a backend.
+    if (this.csvData) {
+      const view = this.computeChartViewFromCsv(chart)
+      this.chartHandles.set(id, renderChart(body, view))
+      return
+    }
+
     if (!this.ctx.dataSource) {
       // Mock path — synchronous filter against embedded series.
       const view = applyFilters(chart, this.dashboard.filters ?? [])
@@ -1255,6 +1318,58 @@ export class DashboardEditor {
     const globals = this.dashboard.filters ?? []
     const local = chart.dashboard_chart_config?.filters ?? []
     return [...globals, ...local]
+  }
+
+  /** Build a chart-view from the uploaded CSV: filter rows, group by the
+   *  chart's dimension, aggregate per the chart's aggregation mode. Returns
+   *  a clone of the chart with `series` (and `kpi_value` for KPI charts)
+   *  populated. Charts without a dimension reduce to a single value. */
+  private computeChartViewFromCsv(chart: DashboardChartRecord): DashboardChartRecord {
+    if (!this.csvData) return chart
+    const cfg = chart.dashboard_chart_config ?? {}
+    const dimId = cfg.dimension?.questionCode
+    const agg = cfg.aggregation ?? 'count'
+    const filters = this.collectFiltersFor(chart)
+
+    // 1. Filter rows according to the chart's effective filter set.
+    let rows = this.csvData.rows
+    for (const f of filters) {
+      rows = rows.filter((r) => {
+        const v = String(r[f.fieldId] ?? '')
+        const inSet = f.values.includes(v)
+        return f.operator === 'in' || f.operator === 'eq' ? inSet : !inSet
+      })
+    }
+
+    // 2. No dimension → single value (for KPIs / pre-aggregated displays).
+    if (!dimId) {
+      const value = rows.length
+      return {
+        ...chart,
+        kpi_value: value,
+        series: [{ name: 'Total', data: [{ label: 'Total', value }] }],
+      }
+    }
+
+    // 3. Group + aggregate by dimension.
+    const groups = new Map<string, number>()
+    for (const row of rows) {
+      const key = String(row[dimId] ?? '').trim()
+      if (key === '') continue
+      groups.set(key, (groups.get(key) ?? 0) + 1)
+    }
+    const total = Array.from(groups.values()).reduce((s, v) => s + v, 0) || 1
+    let data = Array.from(groups.entries()).map(([label, count]) => ({
+      label,
+      value: agg === 'percentage' ? (count / total) * 100 : count,
+    }))
+    // Sort biggest-first so pies/bars read top-down by magnitude.
+    data = data.sort((a, b) => b.value - a.value)
+
+    return {
+      ...chart,
+      series: [{ name: cfg.dimension?.questionText ?? 'Series', data }],
+    }
   }
 
   /** Tear down + rebuild the canvas (gridstack + charts) for the active page.
@@ -1302,7 +1417,12 @@ export class DashboardEditor {
       {
         column: GRID_COLUMNS,
         cellHeight: GRID_ROW_HEIGHT,
-        margin: 6,
+        // Note: the actual visible gap between cards is enforced by our CSS
+        // (see [data-dashjs] .grid-stack > .grid-stack-item > .grid-stack-item-content)
+        // because gridstack's `margin` option doesn't apply uniformly to all
+        // four sides in v12. We still pass margin: 0 so gridstack doesn't add
+        // its own inset on top of ours.
+        margin: 0,
         float: false,
         animate: true,
         // Grid items (DOM children with .grid-stack-item) self-register from
