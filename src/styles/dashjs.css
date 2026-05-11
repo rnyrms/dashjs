@@ -298,15 +298,28 @@
   min-height: 0;
   overflow: hidden;
 }
+.dashjs-editor__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
 .dashjs-editor__canvas {
   flex: 1;
   overflow: auto;
   background: var(--dashjs-bg-subtle);
+  min-height: 0;
+}
+.dashjs-editor__pagefoot {
+  flex: 0 0 auto;
+  background: var(--dashjs-bg);
+  border-top: 1px solid var(--dashjs-border);
 }
 .dashjs-canvas__inner {
   max-width: 1200px;
   margin: 24px auto;
-  padding: 0 24px;
+  padding: 0 24px 24px;
 }
 .dashjs-canvas__header {
   margin-bottom: 16px;
@@ -328,13 +341,27 @@
 [data-dashjs] .grid-stack-item {
   cursor: grab;
 }
-[data-dashjs] .grid-stack-item-content {
+/* Higher-specificity match to defeat gridstack's
+   `.grid-stack > .grid-stack-item > .grid-stack-item-content` selector
+   (0,3,0) — without this gridstack would set overflow-y: auto and the
+   resulting scrollbar would visually crop the bottom border. */
+[data-dashjs] .grid-stack > .grid-stack-item > .grid-stack-item-content {
   background: var(--dashjs-bg);
   border: 1px solid var(--dashjs-border);
   border-radius: var(--dashjs-radius);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+/* Chart cards: the box-shadow selection ring lives just outside the
+   inner item-content. The outer item carries `.dashjs-card` whose
+   overflow:hidden would clip the ring at the bottom (where the
+   gridstack item-margin is smallest). Force overflow:visible on the
+   outer so the ring is fully visible. */
+[data-dashjs] .grid-stack-item.dashjs-card--chart {
+  overflow: visible;
+  background: transparent;
+  border: 0;
 }
 .dashjs-card__inner {
   height: 100%;
@@ -348,6 +375,10 @@
 .dashjs-card--chart.is-selected .grid-stack-item-content {
   border-color: var(--dashjs-accent);
   box-shadow: 0 0 0 2px var(--dashjs-accent);
+}
+.dashjs-card--chart.is-drop-target .grid-stack-item-content {
+  border: 2px dashed var(--dashjs-accent);
+  background: rgba(35, 131, 226, 0.06);
 }
 .dashjs-card__body[data-chart-body] {
   display: flex;
@@ -393,17 +424,13 @@
   font-style: italic;
 }
 
-/* Page tabs at the bottom of the canvas (Jspreadsheet-style worksheet tabs). */
+/* Page tabs — sit in the .dashjs-editor__pagefoot footer below the
+   scrolling canvas, so they never overlay chart cards. */
 .dashjs-pagetabs {
-  position: sticky;
-  bottom: 0;
   display: flex;
   align-items: center;
   gap: 2px;
   padding: 8px 24px;
-  margin-top: 16px;
-  border-top: 1px solid var(--dashjs-border);
-  background: var(--dashjs-bg);
 }
 .dashjs-pagetab {
   border: 1px solid var(--dashjs-border);
@@ -549,6 +576,18 @@
   font-size: 12px;
   line-height: 1.5;
 }
+.dashjs-props__addchart {
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--dashjs-border);
+  margin-top: 4px;
+  padding-top: 14px;
+}
+.dashjs-props__addchart-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dashjs-text-muted);
+  margin-bottom: 10px;
+}
 .dashjs-fieldlist {
   list-style: none;
   margin: 0;
@@ -565,6 +604,11 @@
   cursor: grab;
 }
 .dashjs-field:hover { background: var(--dashjs-bg-hover); }
+.dashjs-field:active { cursor: grabbing; }
+.dashjs-field.is-dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
 .dashjs-field__badge {
   display: inline-block;
   width: 28px;
@@ -589,6 +633,8 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   padding: 12px;
   min-width: 280px;
+  max-height: 70vh;
+  overflow-y: auto;
 }
 .dashjs-popover__title {
   font-size: 13px;

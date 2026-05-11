@@ -34,6 +34,29 @@ import {
   RotateCcw,
   MoreVertical,
   CalendarDays,
+  // Chart-type icons — one per chart family in the picker / Setup tab.
+  ChartColumn,
+  ChartBarBig,
+  ChartColumnStacked,
+  ChartBarStacked,
+  ChartLine,
+  ChartArea,
+  ChartPie,
+  ChartScatter,
+  Donut,
+  Layers,
+  LayoutGrid,
+  Grid3x3,
+  Workflow,
+  Triangle,
+  TriangleAlert,
+  Clock,
+  Cloud,
+  Gauge,
+  Waves,
+  TrendingUp,
+  CircleDot,
+  Table as TableIcon,
   type IconNode,
 } from 'lucide'
 
@@ -70,6 +93,30 @@ export type IconName =
   | 'reset'
   | 'more'
   | 'calendar'
+  // Chart-type icons
+  | 'chart-bar'
+  | 'chart-bar-horizontal'
+  | 'chart-bar-stacked'
+  | 'chart-bar-stacked-horizontal'
+  | 'chart-line'
+  | 'chart-area'
+  | 'chart-pie'
+  | 'chart-donut'
+  | 'chart-scatter'
+  | 'chart-bubble'
+  | 'chart-layers'
+  | 'chart-treemap'
+  | 'chart-heatmap'
+  | 'chart-sunburst'
+  | 'chart-funnel'
+  | 'chart-pyramid'
+  | 'chart-sankey'
+  | 'chart-timeline'
+  | 'chart-wordcloud'
+  | 'chart-gauge'
+  | 'chart-waterfall'
+  | 'chart-kpi'
+  | 'chart-table'
 
 const ICONS: Record<IconName, IconNode> = {
   plus: Plus,
@@ -104,6 +151,30 @@ const ICONS: Record<IconName, IconNode> = {
   reset: RotateCcw,
   more: MoreVertical,
   calendar: CalendarDays,
+  // Chart-type icons
+  'chart-bar':                   ChartColumn,
+  'chart-bar-horizontal':        ChartBarBig,
+  'chart-bar-stacked':           ChartColumnStacked,
+  'chart-bar-stacked-horizontal': ChartBarStacked,
+  'chart-line':                  ChartLine,
+  'chart-area':                  ChartArea,
+  'chart-pie':                   ChartPie,
+  'chart-donut':                 Donut,
+  'chart-scatter':               ChartScatter,
+  'chart-bubble':                CircleDot,
+  'chart-layers':                Layers,
+  'chart-treemap':               LayoutGrid,
+  'chart-heatmap':               Grid3x3,
+  'chart-sunburst':              Sun,
+  'chart-funnel':                TriangleAlert,
+  'chart-pyramid':               Triangle,
+  'chart-sankey':                Workflow,
+  'chart-timeline':              Clock,
+  'chart-wordcloud':             Cloud,
+  'chart-gauge':                 Gauge,
+  'chart-waterfall':             Waves,
+  'chart-kpi':                   TrendingUp,
+  'chart-table':                 TableIcon,
 }
 
 /**

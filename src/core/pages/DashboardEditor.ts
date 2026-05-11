@@ -26,11 +26,42 @@ type PanelKey = 'data' | 'properties'
 interface PanelState { data: boolean; properties: boolean }
 
 const CHART_TYPE_OPTIONS: { type: ChartType; label: string; iconKey: string }[] = [
-  { type: 'bar',   label: 'Bar',   iconKey: 'chart' },
-  { type: 'line',  label: 'Line',  iconKey: 'chart' },
-  { type: 'pie',   label: 'Pie',   iconKey: 'chart' },
-  { type: 'kpi',   label: 'KPI',   iconKey: 'chart' },
-  { type: 'table', label: 'Table', iconKey: 'chart' },
+  // Bar family
+  { type: 'bar',                   label: 'Bar',          iconKey: 'chart-bar' },
+  { type: 'horizontalBar',         label: 'H. bar',       iconKey: 'chart-bar-horizontal' },
+  { type: 'stackedBar',            label: 'Stacked',      iconKey: 'chart-bar-stacked' },
+  { type: 'stackedBarPercent',     label: '100% stack',   iconKey: 'chart-bar-stacked' },
+  { type: 'stackedHorizontalBar',  label: 'H. stacked',   iconKey: 'chart-bar-stacked-horizontal' },
+  { type: 'lollipop',              label: 'Lollipop',     iconKey: 'chart-scatter' },
+  // Line family
+  { type: 'line',                  label: 'Line',         iconKey: 'chart-line' },
+  { type: 'spline',                label: 'Spline',       iconKey: 'chart-line' },
+  { type: 'area',                  label: 'Area',         iconKey: 'chart-area' },
+  { type: 'areaSpline',            label: 'Area spline',  iconKey: 'chart-area' },
+  { type: 'stackedArea',           label: 'Stacked area', iconKey: 'chart-layers' },
+  // Pie family
+  { type: 'pie',                   label: 'Pie',          iconKey: 'chart-pie' },
+  { type: 'donut',                 label: 'Donut',        iconKey: 'chart-donut' },
+  { type: 'semicircle',            label: 'Semicircle',   iconKey: 'chart-pie' },
+  { type: 'variablePie',           label: 'Var. pie',     iconKey: 'chart-pie' },
+  // Scatter family
+  { type: 'scatter',               label: 'Scatter',      iconKey: 'chart-scatter' },
+  { type: 'bubble',                label: 'Bubble',       iconKey: 'chart-bubble' },
+  // Hierarchy / matrix
+  { type: 'treemap',               label: 'Treemap',      iconKey: 'chart-treemap' },
+  { type: 'heatmap',               label: 'Heatmap',      iconKey: 'chart-heatmap' },
+  { type: 'sunburst',              label: 'Sunburst',     iconKey: 'chart-sunburst' },
+  // Flow / specialty
+  { type: 'funnel',                label: 'Funnel',       iconKey: 'chart-funnel' },
+  { type: 'pyramid',               label: 'Pyramid',      iconKey: 'chart-pyramid' },
+  { type: 'sankey',                label: 'Sankey',       iconKey: 'chart-sankey' },
+  { type: 'timeline',              label: 'Timeline',     iconKey: 'chart-timeline' },
+  { type: 'wordcloud',             label: 'Wordcloud',    iconKey: 'chart-wordcloud' },
+  { type: 'gauge',                 label: 'Gauge',        iconKey: 'chart-gauge' },
+  { type: 'waterfall',             label: 'Waterfall',    iconKey: 'chart-waterfall' },
+  // Display
+  { type: 'kpi',                   label: 'KPI',          iconKey: 'chart-kpi' },
+  { type: 'table',                 label: 'Table',        iconKey: 'chart-table' },
 ]
 
 const AGGREGATION_OPTIONS: { value: AggregationMode; label: string }[] = [
@@ -101,8 +132,13 @@ export class DashboardEditor {
         ${this.renderToolbar(t)}
         ${this.renderFilterBar(t)}
         <div class="dashjs-editor__body" data-panel="${this.panelStateAttr()}">
-          <div class="dashjs-editor__canvas" data-canvas>
-            ${this.renderCanvasContent()}
+          <div class="dashjs-editor__main">
+            <div class="dashjs-editor__canvas" data-canvas>
+              ${this.renderCanvasContent()}
+            </div>
+            <div class="dashjs-editor__pagefoot" data-page-foot>
+              ${this.renderPageTabs()}
+            </div>
           </div>
           <aside class="dashjs-editor__panel dashjs-editor__panel--properties" data-panel-host="properties" aria-hidden="${!this.panels.properties}">
             ${this.panels.properties ? this.renderPropertiesPanel(t) : ''}
@@ -283,7 +319,6 @@ export class DashboardEditor {
           ${(page.charts ?? []).map((c) => this.renderChartCard(c)).join('')}
         </div>
       </div>
-      ${this.renderPageTabs()}
     `
   }
 
@@ -380,10 +415,31 @@ export class DashboardEditor {
           <div class="dashjs-panel__empty">
             ${t('editor.propertiesEmpty', 'Select a chart on the canvas to configure its properties.')}
           </div>
+          <div class="dashjs-props__addchart">
+            <div class="dashjs-props__addchart-title">${t('editor.addChart', 'Add a chart')}</div>
+            ${this.renderAddChartTiles()}
+          </div>
         </div>
       `
     }
     return this.renderPropertiesForChart(chart, t)
+  }
+
+  /** Tile grid shared by the toolbar "Add a chart" popover and the
+   *  Properties-panel empty state. Each tile carries `data-add-type` so a
+   *  single click handler (bound in attachPropertyEvents / openAddChartPopover)
+   *  can dispatch to `addChart(type)`. */
+  private renderAddChartTiles(): string {
+    return `
+      <div class="dashjs-typegrid">
+        ${CHART_TYPE_OPTIONS.map((tile) => `
+          <button class="dashjs-typetile" data-add-type="${tile.type}" title="${tile.label}">
+            <span class="dashjs-typetile__icon">${icon(tile.iconKey as any, { size: 18 })}</span>
+            <span class="dashjs-typetile__label">${tile.label}</span>
+          </button>
+        `).join('')}
+      </div>
+    `
   }
 
   private renderPropertiesForChart(chart: DashboardChartRecord, t: (k: string, f: string) => string): string {
@@ -506,12 +562,27 @@ export class DashboardEditor {
       `
     }
 
+    // Group chart types so the style controls map cleanly. Anything not
+    // matched here falls through with default behaviour (palette + labels +
+    // legend + value format), which is fine for treemap/heatmap/sankey/etc.
+    const isPieLike = type === 'pie' || type === 'donut' || type === 'semicircle' || type === 'variablePie'
+    const isLineLike = type === 'line' || type === 'spline' || type === 'area' || type === 'areaSpline' || type === 'stackedArea'
+    const isBarLike = type === 'bar' || type === 'horizontalBar'
+      || type === 'stackedBar' || type === 'stackedBarPercent' || type === 'stackedHorizontalBar'
+      || type === 'lollipop' || type === 'waterfall'
+    // Gauge takes only the value format.
+    const isGauge = type === 'gauge'
+    // Speciality charts get the palette controls but skip the legend/values toggles.
+    const isSpeciality = type === 'treemap' || type === 'heatmap' || type === 'sunburst'
+      || type === 'funnel' || type === 'pyramid' || type === 'sankey' || type === 'timeline'
+      || type === 'wordcloud' || type === 'scatter' || type === 'bubble'
+
     const cfg = chart.dashboard_chart_config ?? {}
     const labels = cfg.labels ?? {}
-    const showValuesDefault = type === 'kpi' ? false : (type === 'pie' ? true : (type === 'line' ? false : true))
-    const showLegendDefault = type === 'pie' || type === 'line'
-    const legendPosDefault: NonNullable<NonNullable<ChartConfig['labels']>['legendPosition']> = type === 'pie' ? 'right' : 'bottom'
-    const valueFormatDefault: NonNullable<NonNullable<ChartConfig['labels']>['valueFormat']> = type === 'pie' ? 'percent' : 'number'
+    const showValuesDefault = type === 'kpi' ? false : (isLineLike ? false : true)
+    const showLegendDefault = isPieLike || isLineLike || type === 'stackedBar'
+    const legendPosDefault: NonNullable<NonNullable<ChartConfig['labels']>['legendPosition']> = isPieLike ? 'right' : 'bottom'
+    const valueFormatDefault: NonNullable<NonNullable<ChartConfig['labels']>['valueFormat']> = isPieLike ? 'percent' : 'number'
 
     const showValues = labels.showValues ?? showValuesDefault
     const showLegend = labels.showLegend ?? showLegendDefault
@@ -526,10 +597,10 @@ export class DashboardEditor {
       <option value="${o.value}" ${legendPos === o.value ? 'selected' : ''}>${o.label}</option>
     `).join('')
 
-    // Colors section: bar/pie show full palette; line shows single colour;
-    // KPI has none.
+    // Colors section: bar-like / pie-like / speciality get the full palette;
+    // line-like gets a single primary colour; KPI/gauge get none.
     let colorsSection = ''
-    if (type === 'bar' || type === 'pie') {
+    if (isBarLike || isPieLike || isSpeciality) {
       const palette = paletteFor(cfg)
       const swatches = palette.map((color, i) => `
         <label class="dashjs-swatch" title="${t('editor.colorSlot', 'Color')} ${i + 1}">
@@ -547,7 +618,7 @@ export class DashboardEditor {
           </button>
         </div>
       `
-    } else if (type === 'line') {
+    } else if (isLineLike) {
       const palette = paletteFor(cfg)
       colorsSection = `
         <div class="dashjs-props__section">
@@ -560,8 +631,15 @@ export class DashboardEditor {
       `
     }
 
-    // Labels section: KPI only needs value format; others get labels + legend.
-    const labelsSection = type === 'kpi' ? `
+    // Labels section: KPI / gauge only need value format; speciality charts
+    // skip data-label / legend toggles since Highcharts handles them; the
+    // rest get the full label + legend controls.
+    const labelsSection = (type === 'kpi' || isGauge) ? `
+      <div class="dashjs-props__section">
+        <label class="dashjs-props__label">${t('editor.valueFormat', 'Value format')}</label>
+        <select class="dashjs-form__input" data-style="valueFormat">${fmtOptions}</select>
+      </div>
+    ` : isSpeciality ? `
       <div class="dashjs-props__section">
         <label class="dashjs-props__label">${t('editor.valueFormat', 'Value format')}</label>
         <select class="dashjs-form__input" data-style="valueFormat">${fmtOptions}</select>
@@ -609,6 +687,7 @@ export class DashboardEditor {
     this.attachCanvasEvents()
     this.attachPageTabEvents()
     this.attachFieldSearch()
+    this.attachFieldDragEvents()
     this.attachPropertyEvents()
   }
 
@@ -754,11 +833,93 @@ export class DashboardEditor {
         const id = Number(card.dataset.chartId)
         this.selectChart(id)
       })
+
+      // Field-drop target: dragover/drop fires only when the drag has our
+      // custom field MIME type (ignores gridstack's own item drag).
+      card.addEventListener('dragenter', (e) => {
+        if (!this.isFieldDrag(e)) return
+        e.preventDefault()
+        card.classList.add('is-drop-target')
+      })
+      card.addEventListener('dragover', (e) => {
+        if (!this.isFieldDrag(e)) return
+        e.preventDefault()
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+      })
+      card.addEventListener('dragleave', (e) => {
+        // Ignore dragleave when entering a descendant; only remove when
+        // leaving the card boundary entirely.
+        if (card.contains(e.relatedTarget as Node | null)) return
+        card.classList.remove('is-drop-target')
+      })
+      card.addEventListener('drop', (e) => {
+        if (!this.isFieldDrag(e)) return
+        e.preventDefault()
+        card.classList.remove('is-drop-target')
+        const fid = e.dataTransfer?.getData('text/x-dashjs-field')
+        if (!fid) return
+        const id = Number(card.dataset.chartId)
+        this.applyFieldToChart(id, fid)
+      })
     })
     // Click empty canvas → deselect.
     this.root.querySelector<HTMLElement>('[data-canvas]')?.addEventListener('click', (e) => {
       if ((e.target as HTMLElement).closest('[data-chart-id]')) return
       this.selectChart(null)
+    })
+  }
+
+  /** Mount a floating popover under document.body and copy the dashjs scoping
+   *  attributes so its CSS custom properties (--dashjs-*) resolve correctly. */
+  private mountPopover(popover: HTMLElement): void {
+    popover.setAttribute('data-dashjs', '')
+    const theme = this.root.getAttribute('data-dashjs-theme')
+    if (theme) popover.setAttribute('data-dashjs-theme', theme)
+    document.body.appendChild(popover)
+  }
+
+  private isFieldDrag(e: DragEvent): boolean {
+    const types = e.dataTransfer?.types
+    if (!types) return false
+    for (let i = 0; i < types.length; i++) {
+      if (types[i] === 'text/x-dashjs-field') return true
+    }
+    return false
+  }
+
+  private applyFieldToChart(chartId: number, fieldId: string): void {
+    const chart = this.activePage().charts?.find((c) => c.dashboard_chart_id === chartId)
+    if (!chart) return
+    const field = MOCK_FIELDS.find((f) => f.id === fieldId)
+    if (!field) return
+    const cfg = (chart.dashboard_chart_config ??= {})
+    cfg.dimension = { questionCode: field.id, questionText: field.name, questionId: 0 }
+    this.markDirty()
+    // Select the chart so the user sees the change reflected in Properties.
+    this.selectChart(chartId)
+    // selectChart is a no-op if already selected — refresh anyway so the
+    // dimension dropdown / Setup tab reflects the new field.
+    this.refreshPanels()
+    this.rerenderChart(chartId)
+  }
+
+  private attachFieldDragEvents(): void {
+    const list = this.root.querySelector<HTMLElement>('.dashjs-fieldlist')
+    if (!list) return
+    list.querySelectorAll<HTMLElement>('[data-field]').forEach((row) => {
+      row.addEventListener('dragstart', (e) => {
+        const fid = row.dataset.field
+        if (!fid || !e.dataTransfer) return
+        e.dataTransfer.setData('text/x-dashjs-field', fid)
+        e.dataTransfer.effectAllowed = 'copy'
+        row.classList.add('is-dragging')
+      })
+      row.addEventListener('dragend', () => {
+        row.classList.remove('is-dragging')
+        // Belt-and-braces: clear any lingering drop-target highlights.
+        this.root.querySelectorAll('.dashjs-card.is-drop-target')
+          .forEach((c) => c.classList.remove('is-drop-target'))
+      })
     })
   }
 
@@ -769,12 +930,22 @@ export class DashboardEditor {
       this.fieldQuery = (e.target as HTMLInputElement).value
       const list = this.root.querySelector<HTMLElement>('.dashjs-fieldlist')
       if (list) list.innerHTML = this.filteredFields().map(this.renderField).join('')
+      // Re-bind drag handlers on the freshly rendered rows.
+      this.attachFieldDragEvents()
     })
   }
 
   private attachPropertyEvents(): void {
     const host = this.root.querySelector<HTMLElement>('[data-panel-host="properties"]')
     if (!host) return
+
+    // Add-a-chart tile grid shown in the empty Properties state.
+    host.querySelectorAll<HTMLButtonElement>('[data-add-type]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const type = btn.dataset.addType as ChartType
+        if (type) this.addChart(type)
+      })
+    })
 
     // Tab switcher (Setup / Style).
     host.querySelectorAll<HTMLButtonElement>('[data-prop-tab]').forEach((btn) => {
@@ -961,6 +1132,7 @@ export class DashboardEditor {
     })
 
     this.attachFieldSearch()
+    this.attachFieldDragEvents()
     this.attachPropertyEvents()
   }
 
@@ -1013,6 +1185,8 @@ export class DashboardEditor {
     const canvas = this.root.querySelector<HTMLElement>('[data-canvas]')
     if (!canvas) return
     canvas.innerHTML = this.renderCanvasContent()
+    const pageFoot = this.root.querySelector<HTMLElement>('[data-page-foot]')
+    if (pageFoot) pageFoot.innerHTML = this.renderPageTabs()
     this.initGrid()
     this.mountAllCharts()
     this.attachCanvasEvents()
@@ -1165,23 +1339,9 @@ export class DashboardEditor {
     popover.className = 'dashjs-popover dashjs-popover--add-chart'
     popover.setAttribute('data-popover', 'add-chart')
 
-    const tiles: { type: ChartType; label: string }[] = [
-      { type: 'bar',   label: 'Bar' },
-      { type: 'line',  label: 'Line' },
-      { type: 'pie',   label: 'Pie' },
-      { type: 'kpi',   label: 'KPI' },
-      { type: 'table', label: 'Table' },
-    ]
     popover.innerHTML = `
       <div class="dashjs-popover__title">Add a chart</div>
-      <div class="dashjs-typegrid">
-        ${tiles.map((tile) => `
-          <button class="dashjs-typetile" data-add-type="${tile.type}" title="${tile.label}">
-            <span class="dashjs-typetile__icon">${icon('chart', { size: 18 })}</span>
-            <span class="dashjs-typetile__label">${tile.label}</span>
-          </button>
-        `).join('')}
-      </div>
+      ${this.renderAddChartTiles()}
     `
 
     // Position under the anchor button.
@@ -1190,7 +1350,7 @@ export class DashboardEditor {
     popover.style.top = `${rect.bottom + 4}px`
     popover.style.left = `${rect.left}px`
     popover.style.zIndex = '1000'
-    document.body.appendChild(popover)
+    this.mountPopover(popover)
 
     popover.querySelectorAll<HTMLButtonElement>('[data-add-type]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -1280,7 +1440,7 @@ export class DashboardEditor {
     popover.style.left = `${rect.left}px`
     popover.style.zIndex = '1000'
     popover.style.minWidth = '320px'
-    document.body.appendChild(popover)
+    this.mountPopover(popover)
 
     const fieldSel = popover.querySelector<HTMLSelectElement>('[data-filter-field]')!
     const opSel   = popover.querySelector<HTMLSelectElement>('[data-filter-op]')!

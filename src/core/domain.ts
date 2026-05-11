@@ -4,9 +4,40 @@
 // row/group support.
 
 export type ChartType =
+  // Bar family
   | 'bar'
+  | 'horizontalBar'
+  | 'stackedBar'
+  | 'stackedBarPercent'
+  | 'stackedHorizontalBar'
+  | 'lollipop'
+  // Line family
   | 'line'
+  | 'spline'
+  | 'area'
+  | 'areaSpline'
+  | 'stackedArea'
+  // Pie family
   | 'pie'
+  | 'donut'
+  | 'semicircle'
+  | 'variablePie'
+  // Scatter family
+  | 'scatter'
+  | 'bubble'
+  // Hierarchy / matrix
+  | 'treemap'
+  | 'heatmap'
+  | 'sunburst'
+  // Flow / specialty
+  | 'funnel'
+  | 'pyramid'
+  | 'sankey'
+  | 'timeline'
+  | 'wordcloud'
+  | 'gauge'
+  | 'waterfall'
+  // Display
   | 'kpi'
   | 'table'
 

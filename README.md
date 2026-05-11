@@ -48,8 +48,14 @@ way — it has no host-framework dependency. Mount it on a `<div>`:
   - Center: 12-column drag/resize canvas (gridstack.js) with multi-page tabs
     at the bottom
   - Right rail: Data + Properties panels, both independently toggleable
-- **Chart types**: bar, line, pie, KPI, table — Highcharts for chart primitives,
-  Jspreadsheet for the table type, plain HTML for KPI cards
+- **Chart types** (29): bar, horizontal bar, stacked bar, 100% stacked bar,
+  stacked horizontal bar, lollipop, line, spline, area, area spline,
+  stacked area, pie, donut, semicircle, variable pie, scatter, bubble,
+  treemap, heatmap, sunburst, funnel, pyramid, sankey, timeline,
+  wordcloud, gauge, waterfall, KPI, table — Highcharts (+ funnel,
+  treemap, heatmap, sunburst, sankey, timeline, wordcloud, variable-pie,
+  lollipop, solid-gauge modules) for chart primitives, Jspreadsheet for
+  the table type, plain HTML for KPI cards
 - **Add a chart** picker (toolbar `Add a chart ▾`) drops a typed chart on the
   active page with sample data
 - **Click chart → Properties panel populates**: edit title / type / dimension /
@@ -64,6 +70,8 @@ way — it has no host-framework dependency. Mount it on a `<div>`:
 - **Save**: toolbar Save button enables on dirty edits; the host wires up
   persistence via the `onSave(dashboard)` option (async-aware, shows
   Saving… → Saved feedback)
+- **Drag fields onto charts**: drag any field from the Data panel and drop
+  it on a chart to set that chart's dimension
 - **Light/dark theming** via CSS custom properties (no MUI runtime overhead)
 
 ## What's not done yet
@@ -72,9 +80,8 @@ way — it has no host-framework dependency. Mount it on a `<div>`:
 - Publish / Slug check (host receives the dashboard via `onSave`; dashjs
   itself doesn't persist)
 - KPI / Aggregation re-computation when filters apply (mock can't re-aggregate)
-- Drag fields from Data panel onto chart slots
 - Page rename / delete via right-click
-- More chart types (stacked bar, horizontal bar, area, gauge, donut, radar)
+- Gauge and radar chart types (need Highcharts-more module)
 
 See the roadmap below for the planned phases.
 
@@ -150,9 +157,9 @@ npm run typecheck    # tsc --noEmit
 - [x] Phase C — Multi-page + drag/resize via gridstack.js
 - [x] Phase D — Filters (dashboard-level + chart-level)
 - [x] Phase E — Style tab + explicit Save (`onSave(dashboard)` callback)
+- [x] Phase G — Drag fields from Data panel onto chart slots
+- [x] Phase H — More chart types + stacked variants
 - [ ] Phase F — Real data-source integration (replace mock fields/series)
-- [ ] Phase G — Drag fields from Data panel onto chart slots
-- [ ] Phase H — More chart types + stacked variants
 - [ ] Phase I — Framework adapters (`@dashjs/react`, `@dashjs/vue`)
 
 ## License
