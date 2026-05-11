@@ -1,6 +1,38 @@
 // Internal types for the dashjs core (not domain types — see ./domain.ts).
 
-import type { DashboardRecord, DashboardFull } from './domain'
+import type {
+  DashboardRecord,
+  DashboardFull,
+  DashboardChartRecord,
+  DashboardFilter,
+  ChartDataSeries,
+} from './domain'
+
+/** A field the user can bind to a chart's dimension or filter — the data
+ *  vocabulary for a dashboard. The mock list ships sample fields covering
+ *  the standard FieldType union; in production a DashJsDataSource supplies
+ *  the real catalogue. */
+export type FieldType = 'text' | 'numeric' | 'single' | 'multi' | 'scale' | 'date' | 'geo'
+export interface DataField {
+  id: string
+  name: string
+  type: FieldType
+}
+
+/** Adapter the host provides so dashjs can fetch live field catalogues and
+ *  chart data instead of relying on mock arrays + embedded series. Both
+ *  methods may return synchronously or as a Promise. */
+export interface DashJsDataSource {
+  /** Field catalogue available for binding to dimensions and filters. */
+  listFields: () => DataField[] | Promise<DataField[]>
+  /** Resolve a chart's series, applying both global + chart-level filters.
+   *  `filters` is the full union (dashboard.filters + chart.dashboard_chart_config.filters);
+   *  the host decides how to translate them into its query. */
+  getChartData: (
+    chart: DashboardChartRecord,
+    filters: DashboardFilter[],
+  ) => ChartDataSeries[] | Promise<ChartDataSeries[]>
+}
 
 export type DashJsMode = 'list' | 'editor' | 'viewer' | 'public' | 'auth'
 
@@ -32,6 +64,10 @@ export interface DashJsOptions {
   onDelete?: (id: number) => void
   /** Called when the user explicitly saves in editor mode. Receives a deep clone. */
   onSave?: (dashboard: DashboardFull) => void | Promise<void>
+  /** Optional data source. When provided, the editor uses it for the field
+   *  catalogue + chart data instead of the built-in mocks; charts re-fetch
+   *  whenever their dimension/aggregation/filters change. */
+  dataSource?: DashJsDataSource
 }
 
 export interface DashJsInstance {

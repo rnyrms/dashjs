@@ -80,6 +80,7 @@ export class Dashboard {
           dashboard: this.options.dashboard ?? defaultDashboard(),
           dictionary: this.options.dictionary,
           onSave: this.options.onSave,
+          dataSource: this.options.dataSource,
         })
         editor.render()
         this.page = editor

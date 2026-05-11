@@ -70,13 +70,17 @@ way — it has no host-framework dependency. Mount it on a `<div>`:
 - **Save**: toolbar Save button enables on dirty edits; the host wires up
   persistence via the `onSave(dashboard)` option (async-aware, shows
   Saving… → Saved feedback)
+- **Live data source**: optional `dataSource: { listFields, getChartData }`
+  adapter — when provided, the editor fetches the field catalogue + per-chart
+  data via the host's callbacks instead of using mocks. Per-chart loading
+  placeholder; stale-response token guard so quick config changes don't
+  race
 - **Drag fields onto charts**: drag any field from the Data panel and drop
   it on a chart to set that chart's dimension
 - **Light/dark theming** via CSS custom properties (no MUI runtime overhead)
 
 ## What's not done yet
 
-- Real data-source integration (currently mock fields + mock series)
 - Publish / Slug check (host receives the dashboard via `onSave`; dashjs
   itself doesn't persist)
 - KPI / Aggregation re-computation when filters apply (mock can't re-aggregate)
@@ -159,7 +163,7 @@ npm run typecheck    # tsc --noEmit
 - [x] Phase E — Style tab + explicit Save (`onSave(dashboard)` callback)
 - [x] Phase G — Drag fields from Data panel onto chart slots
 - [x] Phase H — More chart types + stacked variants
-- [ ] Phase F — Real data-source integration (replace mock fields/series)
+- [x] Phase F — Real data-source integration (`dataSource` adapter)
 - [ ] Phase I — Framework adapters (`@dashjs/react`, `@dashjs/vue`)
 
 ## License

@@ -1,15 +1,14 @@
-// Mock data for Phase 1 of the editor UI. Replace with real data-source
-// integration in a later phase (analysisService.getQuestions, etc).
+// Mock data for the editor UI. Used when no DashJsDataSource is supplied
+// to dashjs(). When a host wires up a real data source (Phase F), the
+// editor calls dataSource.listFields() and dataSource.getChartData()
+// instead of using these constants.
 
 import type { DashboardFull } from './domain'
+import type { DataField, FieldType } from './types'
 
-export type FieldType = 'text' | 'numeric' | 'single' | 'multi' | 'scale' | 'date' | 'geo'
-
-export interface DataField {
-  id: string
-  name: string
-  type: FieldType
-}
+// Re-export so existing imports of DataField/FieldType from mockData
+// keep compiling — the canonical location is now ./types.
+export type { DataField, FieldType }
 
 export const MOCK_FIELDS: DataField[] = [
   { id: 'q1', name: 'Achievement ID', type: 'text' },

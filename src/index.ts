@@ -17,14 +17,25 @@ import type { DashJsOptions, DashJsInstance } from './core/types'
 // worksheet renders. Consumers can call dashjs.setLicense(key) to override.
 jspreadsheet.setLicense('evaluation')
 
-export type { DashJsOptions, DashJsInstance, DashJsMode } from './core/types'
+export type {
+  DashJsOptions,
+  DashJsInstance,
+  DashJsMode,
+  DashJsDataSource,
+  DataField,
+  FieldType,
+} from './core/types'
 export type {
   DashboardRecord,
   DashboardFull,
   DashboardChartRecord,
   DashboardPageRecord,
+  DashboardFilter,
   ChartConfig,
+  ChartDataPoint,
+  ChartDataSeries,
   ChartType,
+  FilterOperator,
 } from './core/domain'
 
 function dashjs(element: HTMLElement, options: DashJsOptions = {}): DashJsInstance {

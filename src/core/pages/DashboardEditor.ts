@@ -5,12 +5,13 @@
 
 import { GridStack, type GridItemHTMLElement, type GridStackNode } from 'gridstack'
 import type { DashboardFull, DashboardChartRecord, ChartType, AggregationMode, DashboardPageRecord, DashboardFilter, FilterOperator, ChartConfig } from '../domain'
+import type { DashJsDataSource, DataField } from '../types'
 import { renderChart, type ChartHandle } from '../charts/renderChart'
 import { createDefaultChart } from '../charts/defaults'
 import { applyFilters } from '../charts/applyFilters'
 import { DEFAULT_PALETTE, paletteFor } from '../charts/palette'
 import { icon } from '../icons'
-import { MOCK_FIELDS, fieldTypeBadge, type DataField } from '../mockData'
+import { MOCK_FIELDS, fieldTypeBadge } from '../mockData'
 
 const GRID_COLUMNS = 12
 /** Pixel height of one grid row. Determines chart heights together with `h`. */
@@ -20,6 +21,7 @@ export interface DashboardEditorContext {
   dashboard: DashboardFull
   dictionary?: Record<string, string>
   onSave?: (dashboard: DashboardFull) => void | Promise<void>
+  dataSource?: DashJsDataSource
 }
 
 type PanelKey = 'data' | 'properties'
@@ -102,6 +104,12 @@ export class DashboardEditor {
   private isSaving = false
   private savedFlashTimer: number | null = null
   private activePropTab: PropTab = 'setup'
+  /** Field catalogue — sourced from ctx.dataSource.listFields() when present,
+   *  else MOCK_FIELDS. Updated asynchronously after construction. */
+  private fields: DataField[] = []
+  /** Per-chart fetch tokens so stale getChartData responses can't overwrite
+   *  a newer render after the user changes the chart's config quickly. */
+  private chartFetchTokens = new Map<number, number>()
   /** Bound listener so we can remove it cleanly when the popover closes. */
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null
   private escKeyHandler: ((e: KeyboardEvent) => void) | null = null
@@ -120,6 +128,10 @@ export class DashboardEditor {
       })
     }
     this.activePageId = this.dashboard.pages[0].dashboard_page_id
+    // Seed fields synchronously with the mock so the first render has
+    // something to show; if a dataSource is provided, refresh once the
+    // host promise resolves and re-render the affected surfaces.
+    this.fields = MOCK_FIELDS
   }
 
   render(): void {
@@ -158,6 +170,25 @@ export class DashboardEditor {
     this.mountAllCharts()
     this.attachEvents()
     this.updatePageLabel()
+    // Refresh field catalogue from the data source if one is provided.
+    // Runs async; we don't block the initial render.
+    void this.loadFields()
+  }
+
+  /** Pull the field catalogue from the data source (when present). On
+   *  success, re-render any panel that lists or selects fields so the new
+   *  catalogue takes effect. Errors fall back to whatever fields are
+   *  already loaded — typically MOCK_FIELDS from construction. */
+  private async loadFields(): Promise<void> {
+    if (!this.ctx.dataSource) return
+    try {
+      const fields = await this.ctx.dataSource.listFields()
+      this.fields = fields
+      // Re-render the Data panel + Properties dropdowns to reflect the new fields.
+      this.refreshPanels()
+    } catch (err) {
+      console.error('[dashjs] listFields failed', err)
+    }
   }
 
   destroy(): void {
@@ -485,7 +516,7 @@ export class DashboardEditor {
       </button>
     `).join('')
 
-    const dimensionOptions = MOCK_FIELDS.map((f) => `
+    const dimensionOptions = this.fields.map((f) => `
       <option value="${f.id}" ${dim?.questionCode === f.id ? 'selected' : ''}>${escape(f.name)}</option>
     `).join('')
 
@@ -890,7 +921,7 @@ export class DashboardEditor {
   private applyFieldToChart(chartId: number, fieldId: string): void {
     const chart = this.activePage().charts?.find((c) => c.dashboard_chart_id === chartId)
     if (!chart) return
-    const field = MOCK_FIELDS.find((f) => f.id === fieldId)
+    const field = this.fields.find((f) => f.id === fieldId)
     if (!field) return
     const cfg = (chart.dashboard_chart_config ??= {})
     cfg.dimension = { questionCode: field.id, questionText: field.name, questionId: 0 }
@@ -996,7 +1027,7 @@ export class DashboardEditor {
       if (!id) {
         delete cfg.dimension
       } else {
-        const f = MOCK_FIELDS.find((m) => m.id === id)
+        const f = this.fields.find((m) => m.id === id)
         if (f) cfg.dimension = { questionCode: f.id, questionText: f.name, questionId: 0 }
       }
       this.markDirty()
@@ -1161,20 +1192,69 @@ export class DashboardEditor {
   }
 
   private rerenderChart(id: number): void {
+    void this.mountChart(id)
+  }
+
+  /** Mount/remount a single chart. Synchronous when there's no data source
+   *  (the existing mock path). When a data source is provided, shows a
+   *  loading placeholder, fetches data, and applies it on resolve — guarded
+   *  by a per-chart fetch token so a stale earlier response can't overwrite
+   *  a newer one. */
+  private async mountChart(id: number): Promise<void> {
     const chart = this.activePage().charts?.find((c) => c.dashboard_chart_id === id)
     if (!chart) return
 
-    // Dispose existing instance.
+    // Dispose any existing Highcharts/Jspreadsheet instance for this chart.
     this.chartHandles.get(id)?.destroy()
     this.chartHandles.delete(id)
 
-    // Find body element and remount.
     const body = this.root.querySelector<HTMLElement>(
       `[data-chart-id="${id}"] [data-chart-body]`,
     )
     if (!body) return
-    const view = applyFilters(chart, this.dashboard.filters ?? [])
-    this.chartHandles.set(id, renderChart(body, view))
+
+    // Bump the fetch token so any in-flight earlier fetch for this chart
+    // becomes a no-op when it resolves.
+    const token = (this.chartFetchTokens.get(id) ?? 0) + 1
+    this.chartFetchTokens.set(id, token)
+
+    if (!this.ctx.dataSource) {
+      // Mock path — synchronous filter against embedded series.
+      const view = applyFilters(chart, this.dashboard.filters ?? [])
+      this.chartHandles.set(id, renderChart(body, view))
+      return
+    }
+
+    // Live data path — show placeholder, fetch, then render.
+    body.innerHTML = `<div class="dashjs-chart__placeholder">Loading…</div>`
+    const allFilters = this.collectFiltersFor(chart)
+    try {
+      const series = await this.ctx.dataSource.getChartData(chart, allFilters)
+      // Stale-response guard: skip if a newer request has been queued.
+      if (this.chartFetchTokens.get(id) !== token) return
+      // Body might have been destroyed by a page switch — re-query.
+      const liveBody = this.root.querySelector<HTMLElement>(
+        `[data-chart-id="${id}"] [data-chart-body]`,
+      )
+      if (!liveBody) return
+      const view: DashboardChartRecord = { ...chart, series }
+      this.chartHandles.set(id, renderChart(liveBody, view))
+    } catch (err) {
+      if (this.chartFetchTokens.get(id) !== token) return
+      console.error('[dashjs] getChartData failed for chart', id, err)
+      const liveBody = this.root.querySelector<HTMLElement>(
+        `[data-chart-id="${id}"] [data-chart-body]`,
+      )
+      if (liveBody) liveBody.innerHTML = `<div class="dashjs-chart__placeholder">Failed to load data</div>`
+    }
+  }
+
+  /** Union of dashboard-level + chart-level filters — what the data source
+   *  needs to apply when fetching this chart's series. */
+  private collectFiltersFor(chart: DashboardChartRecord): DashboardFilter[] {
+    const globals = this.dashboard.filters ?? []
+    const local = chart.dashboard_chart_config?.filters ?? []
+    return [...globals, ...local]
   }
 
   /** Tear down + rebuild the canvas (gridstack + charts) for the active page.
@@ -1194,14 +1274,8 @@ export class DashboardEditor {
   }
 
   private mountAllCharts(): void {
-    const globals = this.dashboard.filters ?? []
     for (const c of this.activePage().charts ?? []) {
-      const body = this.root.querySelector<HTMLElement>(
-        `[data-chart-id="${c.dashboard_chart_id}"] [data-chart-body]`,
-      )
-      if (!body) continue
-      const view = applyFilters(c, globals)
-      this.chartHandles.set(c.dashboard_chart_id, renderChart(body, view))
+      void this.mountChart(c.dashboard_chart_id)
     }
   }
 
@@ -1411,7 +1485,7 @@ export class DashboardEditor {
           <label class="dashjs-form__label">Field</label>
           <select class="dashjs-form__input" data-filter-field>
             <option value="">— Choose a field —</option>
-            ${MOCK_FIELDS.map((f) => `<option value="${f.id}">${escape(f.name)}</option>`).join('')}
+            ${this.fields.map((f) => `<option value="${f.id}">${escape(f.name)}</option>`).join('')}
           </select>
         </div>
         <div class="dashjs-form__row">
@@ -1454,7 +1528,7 @@ export class DashboardEditor {
     popover.querySelector<HTMLButtonElement>('[data-filter-apply]')?.addEventListener('click', () => {
       const fieldId = fieldSel.value
       if (!fieldId) { fieldSel.focus(); return }
-      const field = MOCK_FIELDS.find((f) => f.id === fieldId)
+      const field = this.fields.find((f) => f.id === fieldId)
       if (!field) return
       const values = valsIn.value.split(',').map((s) => s.trim()).filter(Boolean)
       if (values.length === 0) { valsIn.focus(); return }
@@ -1560,8 +1634,8 @@ export class DashboardEditor {
 
   private filteredFields(): DataField[] {
     const q = this.fieldQuery.trim().toLowerCase()
-    if (!q) return MOCK_FIELDS
-    return MOCK_FIELDS.filter((f) => f.name.toLowerCase().includes(q))
+    if (!q) return this.fields
+    return this.fields.filter((f) => f.name.toLowerCase().includes(q))
   }
 }
 
