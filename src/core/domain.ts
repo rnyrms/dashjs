@@ -72,9 +72,26 @@ export interface ChartDataSeries {
   data: ChartDataPoint[]
 }
 
-export interface ChartConfig {
-  dimension?: ChartDimension
+/** A single slot value: a field reference and/or an aggregation mode.
+ *  Dimension slots use only `fieldId`; metric slots use `aggregation` plus
+ *  an optional `fieldId` (required when aggregation is sum/mean, ignored
+ *  otherwise). The slot's `kind` lives in the chart-type schema, not here. */
+export interface ChartSlotValue {
+  fieldId?: string
   aggregation?: AggregationMode
+}
+
+export interface ChartConfig {
+  /** @deprecated Use `slots.dimension` instead — kept for back-compat with
+   *  dashboards saved before the slot system. The editor still writes here
+   *  alongside slots so legacy readers keep working. */
+  dimension?: ChartDimension
+  /** @deprecated Use `slots.metric.aggregation` instead. */
+  aggregation?: AggregationMode
+  /** Field bindings for each slot the chart type declares. Slot ids come
+   *  from CHART_TYPE_SCHEMAS (e.g. 'dimension', 'metric', 'breakdown',
+   *  'xMetric', 'source'). */
+  slots?: Record<string, ChartSlotValue>
   /** Chart-level filters — only affect this chart, applied on top of the
    *  dashboard-level filters. */
   filters?: DashboardFilter[]

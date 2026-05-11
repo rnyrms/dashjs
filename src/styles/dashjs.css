@@ -711,6 +711,176 @@
   margin-bottom: 6px;
   font-weight: 500;
 }
+/* --- Slot chips (Looker-style dimension/metric pills) ---------------
+   Anatomy:
+     [badge][name flex:1][× 24px]
+   Dimension chip: green border + green/coloured badge from field type.
+   Metric chip:    blue border  + blue badge that doubles as the agg picker
+                   trigger (SUM / AVG / CT / %).
+*/
+.dashjs-chip {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  height: 30px;
+  width: 100%;
+  border: 1px solid var(--dashjs-border);
+  border-radius: 4px;
+  background: var(--dashjs-bg);
+  font: inherit;
+  font-size: 12px;
+  overflow: hidden;
+}
+.dashjs-chip--empty {
+  border-style: dashed;
+  background: var(--dashjs-bg-subtle);
+  color: var(--dashjs-text-muted);
+  cursor: pointer;
+  align-items: center;
+  padding: 0 10px;
+  gap: 6px;
+}
+.dashjs-chip--empty:hover { background: var(--dashjs-bg-hover); }
+.dashjs-chip--dim {
+  border-color: #b7e1cd;
+  background: rgba(13, 157, 88, 0.05);
+}
+.dashjs-chip--dim.dashjs-chip--empty {
+  border-color: #b7e1cd;
+  color: #137333;
+}
+.dashjs-chip--metric {
+  border-color: #c6dafc;
+  background: rgba(26, 115, 232, 0.05);
+}
+.dashjs-chip__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #fff;
+  flex-shrink: 0;
+  border: 0;
+  cursor: default;
+}
+.dashjs-chip__badge--metric {
+  background: #1a73e8;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #fff;
+}
+.dashjs-chip__badge--metric:hover { background: #1557b0; }
+.dashjs-chip__name {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--dashjs-text);
+  padding: 0 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dashjs-chip__name:hover { background: rgba(0, 0, 0, 0.04); }
+.dashjs-chip__x {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--dashjs-text-muted);
+  cursor: pointer;
+  opacity: 0.5;
+}
+.dashjs-chip__x:hover { opacity: 1; color: var(--dashjs-danger); background: rgba(0, 0, 0, 0.04); }
+.dashjs-chip.is-drop-target {
+  outline: 2px solid var(--dashjs-accent);
+  outline-offset: -1px;
+}
+
+/* Field picker popover */
+.dashjs-popover--fieldpicker {
+  padding: 8px;
+  min-width: 240px;
+  max-height: 360px;
+  display: flex;
+  flex-direction: column;
+}
+.dashjs-popover--fieldpicker .dashjs-form__input {
+  margin-bottom: 6px;
+}
+.dashjs-fieldpicker__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+.dashjs-fieldpicker__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.dashjs-fieldpicker__item .dashjs-chip__badge {
+  height: 20px;
+  min-width: 28px;
+  border-radius: 3px;
+}
+.dashjs-fieldpicker__item:hover { background: var(--dashjs-bg-hover); }
+.dashjs-fieldpicker__item--virtual {
+  border-bottom: 1px solid var(--dashjs-border);
+  margin-bottom: 4px;
+  padding-bottom: 8px !important;
+}
+.dashjs-fieldpicker__empty {
+  padding: 12px;
+  color: var(--dashjs-text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Aggregation picker popover */
+.dashjs-popover--agg {
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: 6px;
+}
+.dashjs-popover--agg button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--dashjs-text);
+}
+.dashjs-popover--agg button:hover { background: var(--dashjs-bg-hover); }
+.dashjs-popover--agg button.is-active {
+  color: var(--dashjs-accent);
+  font-weight: 500;
+  background: rgba(35, 131, 226, 0.08);
+}
 
 /* Type tile grid (chart type picker inside Properties) */
 .dashjs-typegrid {

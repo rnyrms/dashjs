@@ -11,6 +11,7 @@ import { createDefaultChart } from '../charts/defaults'
 import { applyFilters } from '../charts/applyFilters'
 import { DEFAULT_PALETTE, paletteFor } from '../charts/palette'
 import { parseCsv } from '../charts/csv'
+import { CHART_TYPE_SCHEMAS, readSlot, type SlotSpec } from '../charts/slots'
 import { icon } from '../icons'
 import { MOCK_FIELDS, fieldTypeBadge } from '../mockData'
 
@@ -73,6 +74,14 @@ const AGGREGATION_OPTIONS: { value: AggregationMode; label: string }[] = [
   { value: 'mean',       label: 'Mean' },
   { value: 'sum',        label: 'Sum' },
 ]
+
+/** Short uppercase labels shown inline on metric chips (Looker convention). */
+const AGG_SHORT_LABEL: Record<AggregationMode, string> = {
+  count:      'CNT',
+  percentage: '%',
+  sum:        'SUM',
+  mean:       'AVG',
+}
 
 const VALUE_FORMAT_OPTIONS: { value: NonNullable<NonNullable<ChartConfig['labels']>['valueFormat']>; label: string }[] = [
   { value: 'number',   label: 'Number' },
@@ -509,8 +518,6 @@ export class DashboardEditor {
 
   private renderSetupTab(chart: DashboardChartRecord, t: (k: string, f: string) => string): string {
     const cfg = chart.dashboard_chart_config ?? {}
-    const dim = cfg.dimension
-    const agg = cfg.aggregation ?? 'count'
 
     const typeOptions = CHART_TYPE_OPTIONS.map((o) => `
       <button
@@ -524,13 +531,8 @@ export class DashboardEditor {
       </button>
     `).join('')
 
-    const dimensionOptions = this.fields.map((f) => `
-      <option value="${f.id}" ${dim?.questionCode === f.id ? 'selected' : ''}>${escape(f.name)}</option>
-    `).join('')
-
-    const aggOptions = AGGREGATION_OPTIONS.map((o) => `
-      <option value="${o.value}" ${agg === o.value ? 'selected' : ''}>${o.label}</option>
-    `).join('')
+    const schema = CHART_TYPE_SCHEMAS[chart.dashboard_chart_type]
+    const slotSections = schema.slots.map((slot) => this.renderSlotChip(slot, cfg)).join('')
 
     return `
       <div class="dashjs-props__section">
@@ -548,20 +550,7 @@ export class DashboardEditor {
         <div class="dashjs-typegrid">${typeOptions}</div>
       </div>
 
-      <div class="dashjs-props__section">
-        <label class="dashjs-props__label">${t('editor.dimension', 'Dimension')}</label>
-        <select class="dashjs-form__input" data-prop="dimension">
-          <option value="">— None —</option>
-          ${dimensionOptions}
-        </select>
-      </div>
-
-      <div class="dashjs-props__section">
-        <label class="dashjs-props__label">${t('editor.aggregation', 'Aggregation')}</label>
-        <select class="dashjs-form__input" data-prop="aggregation">
-          ${aggOptions}
-        </select>
-      </div>
+      ${slotSections}
 
       <div class="dashjs-props__section">
         <label class="dashjs-props__label">${t('editor.filters', 'Filters')}</label>
@@ -587,6 +576,70 @@ export class DashboardEditor {
           ${icon('trash', { size: 14 })}
           <span>${t('editor.deleteChart', 'Delete chart')}</span>
         </button>
+      </div>
+    `
+  }
+
+  /** Render one slot from the chart-type schema as a Looker-style chip.
+   *
+   *  Dimension chip: `[ TYPE-BADGE | field-name | × ]` — green tint, badge
+   *  shows the field's data type glyph (ABC / 123 / 📅 / …). Empty slot
+   *  renders as a dashed "+ Add …" pill.
+   *
+   *  Metric chip: `[ AGG-BADGE | field-name | × ]` — blue tint, badge shows
+   *  the aggregation in uppercase (SUM / AVG / CT / %). When no field is
+   *  bound the chip defaults to "Record Count" (a virtual metric — `count`
+   *  with no fieldId). Metric chips never have an "empty" state.
+   *
+   *  All click targets carry `data-chip-action` so attachChipEvents can
+   *  route to openSlotFieldPicker / openSlotAggPicker / clearSlot.
+   */
+  private renderSlotChip(slot: SlotSpec, cfg: any): string {
+    const value = readSlot(cfg, slot.id)
+    const field = value.fieldId ? this.fields.find((f) => f.id === value.fieldId) : undefined
+
+    if (slot.kind === 'dimension') {
+      if (!field) {
+        return `
+          <div class="dashjs-props__section">
+            <label class="dashjs-props__label">${escape(slot.label)}</label>
+            <button class="dashjs-chip dashjs-chip--empty dashjs-chip--dim"
+                    data-chip-slot="${slot.id}" data-chip-kind="dimension"
+                    data-chip-action="open-field">
+              ${icon('plus', { size: 12 })}
+              <span>Add ${escape(slot.label.toLowerCase())}</span>
+            </button>
+          </div>
+        `
+      }
+      const badge = fieldTypeBadge(field.type)
+      return `
+        <div class="dashjs-props__section">
+          <label class="dashjs-props__label">${escape(slot.label)}</label>
+          <div class="dashjs-chip dashjs-chip--dim"
+               data-chip-slot="${slot.id}" data-chip-kind="dimension">
+            <span class="dashjs-chip__badge dashjs-chip__badge--dim" style="background:${badge.color}">${badge.label}</span>
+            <button class="dashjs-chip__name" data-chip-action="open-field" title="${escape(field.name)}">${escape(field.name)}</button>
+            <button class="dashjs-chip__x" data-chip-action="remove" aria-label="Remove">${icon('x', { size: 10 })}</button>
+          </div>
+        </div>
+      `
+    }
+
+    // Metric slot — always shows a chip. No field bound = Record Count.
+    const agg = value.aggregation ?? 'count'
+    const aggLabel = AGG_SHORT_LABEL[agg]
+    const isRecordCount = !field
+    const displayName = isRecordCount ? 'Record Count' : (field?.name ?? '')
+    return `
+      <div class="dashjs-props__section">
+        <label class="dashjs-props__label">${escape(slot.label)}</label>
+        <div class="dashjs-chip dashjs-chip--metric"
+             data-chip-slot="${slot.id}" data-chip-kind="metric">
+          <button class="dashjs-chip__badge dashjs-chip__badge--metric" data-chip-action="open-agg" title="Aggregation">${aggLabel}</button>
+          <button class="dashjs-chip__name" data-chip-action="open-field" title="${escape(displayName)}">${escape(displayName)}</button>
+          <button class="dashjs-chip__x" data-chip-action="remove" aria-label="Reset">${icon('x', { size: 10 })}</button>
+        </div>
       </div>
     `
   }
@@ -756,6 +809,42 @@ export class DashboardEditor {
     })
 
     this.attachFilterBarEvents()
+  }
+
+  /** Merge a partial slot value into the chart's config. Also mirrors the
+   *  primary dimension/metric into the legacy `dimension` + `aggregation`
+   *  fields so any reader that still consults them sees the same data. */
+  private updateSlot(
+    chart: DashboardChartRecord,
+    slotId: string,
+    patch: { fieldId?: string; aggregation?: AggregationMode },
+  ): void {
+    const cfg = (chart.dashboard_chart_config ??= {})
+    const slots = (cfg.slots ??= {})
+    const prev = slots[slotId] ?? {}
+    const next = { ...prev, ...patch }
+    // Empty fieldId on a dimension slot means "unbound" → drop the entry.
+    if (next.fieldId === undefined && next.aggregation === undefined) {
+      delete slots[slotId]
+    } else {
+      slots[slotId] = next
+    }
+    // Mirror to legacy fields for the primary slots.
+    if (slotId === 'dimension') {
+      if (next.fieldId) {
+        const field = this.fields.find((f) => f.id === next.fieldId)
+        if (field) {
+          cfg.dimension = { questionCode: field.id, questionText: field.name, questionId: 0 }
+        }
+      } else {
+        delete cfg.dimension
+      }
+    }
+    if (slotId === 'metric' && next.aggregation) {
+      cfg.aggregation = next.aggregation
+    }
+    this.markDirty()
+    this.rerenderChart(chart.dashboard_chart_id)
   }
 
   private markDirty(): void {
@@ -937,15 +1026,11 @@ export class DashboardEditor {
     if (!chart) return
     const field = this.fields.find((f) => f.id === fieldId)
     if (!field) return
-    const cfg = (chart.dashboard_chart_config ??= {})
-    cfg.dimension = { questionCode: field.id, questionText: field.name, questionId: 0 }
-    this.markDirty()
-    // Select the chart so the user sees the change reflected in Properties.
+    // updateSlot mirrors to legacy fields, marks dirty, and triggers rerender.
+    this.updateSlot(chart, 'dimension', { fieldId: field.id })
+    // Select the chart so the user sees the change in Properties.
     this.selectChart(chartId)
-    // selectChart is a no-op if already selected — refresh anyway so the
-    // dimension dropdown / Setup tab reflects the new field.
     this.refreshPanels()
-    this.rerenderChart(chartId)
   }
 
   private attachFieldDragEvents(): void {
@@ -1071,33 +1156,7 @@ export class DashboardEditor {
       })
     })
 
-    // Dimension select.
-    const dimSelect = host.querySelector<HTMLSelectElement>('[data-prop="dimension"]')
-    dimSelect?.addEventListener('change', (e) => {
-      const chart = this.selectedChart()
-      if (!chart) return
-      const id = (e.target as HTMLSelectElement).value
-      const cfg = (chart.dashboard_chart_config ??= {})
-      if (!id) {
-        delete cfg.dimension
-      } else {
-        const f = this.fields.find((m) => m.id === id)
-        if (f) cfg.dimension = { questionCode: f.id, questionText: f.name, questionId: 0 }
-      }
-      this.markDirty()
-      this.rerenderChart(chart.dashboard_chart_id)
-    })
-
-    // Aggregation select.
-    const aggSelect = host.querySelector<HTMLSelectElement>('[data-prop="aggregation"]')
-    aggSelect?.addEventListener('change', (e) => {
-      const chart = this.selectedChart()
-      if (!chart) return
-      const cfg = (chart.dashboard_chart_config ??= {})
-      cfg.aggregation = (e.target as HTMLSelectElement).value as AggregationMode
-      this.markDirty()
-      this.rerenderChart(chart.dashboard_chart_id)
-    })
+    this.attachChipEvents(host)
 
     // Add chart-level filter.
     const addFilterBtn = host.querySelector<HTMLButtonElement>('[data-action="add-chart-filter"]')
@@ -1327,9 +1386,14 @@ export class DashboardEditor {
   private computeChartViewFromCsv(chart: DashboardChartRecord): DashboardChartRecord {
     if (!this.csvData) return chart
     const cfg = chart.dashboard_chart_config ?? {}
-    const dimId = cfg.dimension?.questionCode
-    const agg = cfg.aggregation ?? 'count'
     const filters = this.collectFiltersFor(chart)
+
+    // Read primary dimension + metric from slots (with legacy fallback).
+    const dimSlot = readSlot(cfg, 'dimension')
+    const metricSlot = readSlot(cfg, 'metric')
+    const dimId = dimSlot.fieldId
+    const agg = metricSlot.aggregation ?? 'count'
+    const metricFieldId = metricSlot.fieldId
 
     // 1. Filter rows according to the chart's effective filter set.
     let rows = this.csvData.rows
@@ -1341,9 +1405,9 @@ export class DashboardEditor {
       })
     }
 
-    // 2. No dimension → single value (for KPIs / pre-aggregated displays).
+    // 2. No dimension → single scalar (KPI, gauge, etc.).
     if (!dimId) {
-      const value = rows.length
+      const value = this.aggregateRows(rows, agg, metricFieldId)
       return {
         ...chart,
         kpi_value: value,
@@ -1351,25 +1415,53 @@ export class DashboardEditor {
       }
     }
 
-    // 3. Group + aggregate by dimension.
-    const groups = new Map<string, number>()
+    // 3. Group by dimension, aggregate per group.
+    const groups = new Map<string, Record<string, string>[]>()
     for (const row of rows) {
       const key = String(row[dimId] ?? '').trim()
       if (key === '') continue
-      groups.set(key, (groups.get(key) ?? 0) + 1)
+      const bucket = groups.get(key) ?? []
+      bucket.push(row)
+      groups.set(key, bucket)
     }
-    const total = Array.from(groups.values()).reduce((s, v) => s + v, 0) || 1
-    let data = Array.from(groups.entries()).map(([label, count]) => ({
+    const perGroup = Array.from(groups.entries()).map(([label, groupRows]) => ({
       label,
-      value: agg === 'percentage' ? (count / total) * 100 : count,
+      value: this.aggregateRows(groupRows, agg, metricFieldId),
+    }))
+    const grandTotal = perGroup.reduce((s, g) => s + g.value, 0) || 1
+    let data = perGroup.map(({ label, value }) => ({
+      label,
+      value: agg === 'percentage' ? (value / grandTotal) * 100 : value,
     }))
     // Sort biggest-first so pies/bars read top-down by magnitude.
     data = data.sort((a, b) => b.value - a.value)
 
+    const seriesName = this.fields.find((f) => f.id === dimId)?.name ?? 'Series'
     return {
       ...chart,
-      series: [{ name: cfg.dimension?.questionText ?? 'Series', data }],
+      series: [{ name: seriesName, data }],
     }
+  }
+
+  /** Aggregate a group of CSV rows into a single number per the requested
+   *  mode. `count` ignores `fieldId`; `sum`/`mean` need a numeric field and
+   *  fall back to row count when one isn't bound. `percentage` is handled
+   *  by the caller (it needs the grand total). */
+  private aggregateRows(
+    rows: Record<string, string>[],
+    agg: AggregationMode,
+    fieldId: string | undefined,
+  ): number {
+    if (agg === 'count' || agg === 'percentage' || !fieldId) {
+      return rows.length
+    }
+    const values = rows
+      .map((r) => Number(r[fieldId]))
+      .filter((v) => !isNaN(v))
+    if (values.length === 0) return 0
+    if (agg === 'sum') return values.reduce((s, v) => s + v, 0)
+    if (agg === 'mean') return values.reduce((s, v) => s + v, 0) / values.length
+    return rows.length
   }
 
   /** Tear down + rebuild the canvas (gridstack + charts) for the active page.
@@ -1576,6 +1668,242 @@ export class DashboardEditor {
     const anchor = this.root.querySelector<HTMLButtonElement>('[data-tb="add-chart"]')
     anchor?.classList.remove('is-active')
     document.querySelector('[data-popover="add-chart"]')?.remove()
+    if (this.outsideClickHandler) {
+      document.removeEventListener('click', this.outsideClickHandler)
+      this.outsideClickHandler = null
+    }
+    if (this.escKeyHandler) {
+      document.removeEventListener('keydown', this.escKeyHandler)
+      this.escKeyHandler = null
+    }
+  }
+
+  // --- chip events + slot popovers ---
+
+  /** Wire clicks on every slot chip inside the Properties host. Three
+   *  actions per chip — open the field picker, open the aggregation picker,
+   *  or clear the binding. Chips also accept drops from the Data panel. */
+  private attachChipEvents(host: HTMLElement): void {
+    host.querySelectorAll<HTMLElement>('[data-chip-slot]').forEach((chip) => {
+      const slotId = chip.dataset.chipSlot
+      const kind = chip.dataset.chipKind as 'dimension' | 'metric'
+      if (!slotId) return
+
+      // Action buttons inside the chip — open-field / open-agg / remove.
+      chip.querySelectorAll<HTMLElement>('[data-chip-action]').forEach((el) => {
+        el.addEventListener('click', (e) => {
+          e.stopPropagation()
+          const action = el.dataset.chipAction
+          if (action === 'open-field') this.openSlotFieldPicker(el, slotId)
+          else if (action === 'open-agg') this.openSlotAggPicker(el, slotId)
+          else if (action === 'remove') this.clearSlot(slotId)
+        })
+      })
+
+      // Whole empty-chip click opens the field picker too (the inner button
+      // may not be the click target on some clicks).
+      if (chip.classList.contains('dashjs-chip--empty')) {
+        chip.addEventListener('click', (e) => {
+          if ((e.target as HTMLElement).closest('[data-chip-action]')) return
+          this.openSlotFieldPicker(chip, slotId)
+        })
+      }
+
+      // Drop target — accept a field drag from the Data panel.
+      chip.addEventListener('dragenter', (e) => {
+        if (!this.isFieldDrag(e)) return
+        e.preventDefault()
+        chip.classList.add('is-drop-target')
+      })
+      chip.addEventListener('dragover', (e) => {
+        if (!this.isFieldDrag(e)) return
+        e.preventDefault()
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+      })
+      chip.addEventListener('dragleave', (e) => {
+        if (chip.contains(e.relatedTarget as Node | null)) return
+        chip.classList.remove('is-drop-target')
+      })
+      chip.addEventListener('drop', (e) => {
+        if (!this.isFieldDrag(e)) return
+        e.preventDefault()
+        chip.classList.remove('is-drop-target')
+        const fid = e.dataTransfer?.getData('text/x-dashjs-field')
+        if (!fid) return
+        const chart = this.selectedChart()
+        if (!chart) return
+        this.updateSlot(chart, slotId, { fieldId: fid })
+        this.refreshPanels()
+      })
+
+      // Suppress drag-cursor on the outer chip (it's draggable: false by default
+      // but the inner buttons can still pick up mousedown drags).
+      void kind
+    })
+  }
+
+  private clearSlot(slotId: string): void {
+    const chart = this.selectedChart()
+    if (!chart) return
+    const cfg = chart.dashboard_chart_config
+    if (!cfg?.slots?.[slotId] && !(slotId === 'dimension' && cfg?.dimension)) return
+    delete cfg.slots?.[slotId]
+    if (slotId === 'dimension') delete cfg.dimension
+    if (slotId === 'metric') delete cfg.aggregation
+    this.markDirty()
+    this.refreshPanels()
+    this.rerenderChart(chart.dashboard_chart_id)
+  }
+
+  /** Open the field picker popover anchored to the chip. Shows the full
+   *  field catalogue filtered by an optional slot.fieldTypes hint, with a
+   *  search box. Picking a field updates the slot. */
+  private openSlotFieldPicker(anchor: HTMLElement, slotId: string): void {
+    this.closeSlotPopovers()
+    const chart = this.selectedChart()
+    if (!chart) return
+    const schema = CHART_TYPE_SCHEMAS[chart.dashboard_chart_type]
+    const slot = schema.slots.find((s) => s.id === slotId)
+    if (!slot) return
+
+    const popover = document.createElement('div')
+    popover.className = 'dashjs-popover dashjs-popover--fieldpicker'
+    popover.setAttribute('data-popover', 'fieldpicker')
+
+    const renderList = (query: string) => {
+      const q = query.trim().toLowerCase()
+      const available = slot.fieldTypes && slot.fieldTypes.length > 0
+        ? this.fields.filter((f) => slot.fieldTypes!.includes(f.type))
+        : this.fields
+      // For metric slots: prefer numeric fields up top + offer Record Count.
+      const isMetric = slot.kind === 'metric'
+      const sorted = isMetric
+        ? [...available].sort((a, b) => (a.type === 'numeric' ? -1 : 0) - (b.type === 'numeric' ? -1 : 0))
+        : available
+      const filtered = q ? sorted.filter((f) => f.name.toLowerCase().includes(q)) : sorted
+
+      let html = ''
+      // Record Count virtual entry — only on metric slots, only when the
+      // search query doesn't filter it out.
+      if (isMetric && (!q || 'record count'.includes(q))) {
+        html += `
+          <li class="dashjs-fieldpicker__item dashjs-fieldpicker__item--virtual" data-pick-record-count>
+            <span class="dashjs-chip__badge dashjs-chip__badge--metric">CT</span>
+            <span>Record Count</span>
+          </li>
+        `
+      }
+      html += filtered.map((f) => {
+        const badge = fieldTypeBadge(f.type)
+        return `
+          <li class="dashjs-fieldpicker__item" data-pick-field="${f.id}">
+            <span class="dashjs-chip__badge" style="background:${badge.color}">${badge.label}</span>
+            <span>${escape(f.name)}</span>
+          </li>
+        `
+      }).join('')
+      return html || `<li class="dashjs-fieldpicker__empty">No matching fields</li>`
+    }
+
+    popover.innerHTML = `
+      <input class="dashjs-form__input" data-fieldpicker-search type="search" placeholder="Search fields" />
+      <ul class="dashjs-fieldpicker__list" data-fieldpicker-list>${renderList('')}</ul>
+    `
+
+    const rect = anchor.getBoundingClientRect()
+    popover.style.position = 'fixed'
+    popover.style.top = `${rect.bottom + 4}px`
+    popover.style.left = `${rect.left}px`
+    popover.style.zIndex = '1001'
+    popover.style.minWidth = `${Math.max(rect.width, 240)}px`
+    this.mountPopover(popover)
+
+    const search = popover.querySelector<HTMLInputElement>('[data-fieldpicker-search]')!
+    const list = popover.querySelector<HTMLElement>('[data-fieldpicker-list]')!
+    setTimeout(() => search.focus(), 30)
+
+    const bindItemClicks = () => {
+      list.querySelectorAll<HTMLElement>('[data-pick-field]').forEach((li) => {
+        li.addEventListener('click', () => {
+          const fid = li.dataset.pickField
+          if (!fid) return
+          this.updateSlot(chart, slotId, { fieldId: fid })
+          this.closeSlotPopovers()
+          this.refreshPanels()
+        })
+      })
+      // Record Count = no field + count agg.
+      list.querySelector<HTMLElement>('[data-pick-record-count]')?.addEventListener('click', () => {
+        this.updateSlot(chart, slotId, { fieldId: undefined, aggregation: 'count' })
+        this.closeSlotPopovers()
+        this.refreshPanels()
+      })
+    }
+    bindItemClicks()
+    search.addEventListener('input', () => {
+      list.innerHTML = renderList(search.value)
+      bindItemClicks()
+    })
+
+    this.outsideClickHandler = (e: MouseEvent) => {
+      if (popover.contains(e.target as Node) || anchor.contains(e.target as Node)) return
+      this.closeSlotPopovers()
+    }
+    this.escKeyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') this.closeSlotPopovers()
+    }
+    setTimeout(() => {
+      document.addEventListener('click', this.outsideClickHandler!)
+      document.addEventListener('keydown', this.escKeyHandler!)
+    }, 0)
+  }
+
+  /** Open the aggregation picker for a metric slot — 4 buttons, one per
+   *  AggregationMode. Clicking sets the slot's aggregation. */
+  private openSlotAggPicker(anchor: HTMLElement, slotId: string): void {
+    this.closeSlotPopovers()
+    const chart = this.selectedChart()
+    if (!chart) return
+    const current = readSlot(chart.dashboard_chart_config, slotId).aggregation ?? 'count'
+
+    const popover = document.createElement('div')
+    popover.className = 'dashjs-popover dashjs-popover--agg'
+    popover.setAttribute('data-popover', 'agg')
+    popover.innerHTML = AGGREGATION_OPTIONS.map((o) => `
+      <button class="${o.value === current ? 'is-active' : ''}" data-pick-agg="${o.value}">${o.label}</button>
+    `).join('')
+
+    const rect = anchor.getBoundingClientRect()
+    popover.style.position = 'fixed'
+    popover.style.top = `${rect.bottom + 4}px`
+    popover.style.left = `${rect.left}px`
+    popover.style.zIndex = '1001'
+    this.mountPopover(popover)
+
+    popover.querySelectorAll<HTMLButtonElement>('[data-pick-agg]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const agg = btn.dataset.pickAgg as AggregationMode
+        this.updateSlot(chart, slotId, { aggregation: agg })
+        this.closeSlotPopovers()
+        this.refreshPanels()
+      })
+    })
+
+    this.outsideClickHandler = (e: MouseEvent) => {
+      if (popover.contains(e.target as Node) || anchor.contains(e.target as Node)) return
+      this.closeSlotPopovers()
+    }
+    this.escKeyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') this.closeSlotPopovers()
+    }
+    setTimeout(() => {
+      document.addEventListener('click', this.outsideClickHandler!)
+      document.addEventListener('keydown', this.escKeyHandler!)
+    }, 0)
+  }
+
+  private closeSlotPopovers(): void {
+    document.querySelectorAll('[data-popover="fieldpicker"], [data-popover="agg"]').forEach((el) => el.remove())
     if (this.outsideClickHandler) {
       document.removeEventListener('click', this.outsideClickHandler)
       this.outsideClickHandler = null
