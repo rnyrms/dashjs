@@ -29,6 +29,14 @@ way — it has no host-framework dependency. Mount it on a `<div>`:
       dashboard_name: 'Q1 results',
       pages: [{ dashboard_page_id: 1, dashboard_page_name: 'Overview', charts: [] }],
     },
+    onSave: async (dashboard) => {
+      // Persist however you like — REST, GraphQL, IndexedDB, etc.
+      await fetch('/api/dashboards/1', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(dashboard),
+      })
+    },
   })
 </script>
 ```
@@ -51,13 +59,18 @@ way — it has no host-framework dependency. Mount it on a `<div>`:
   the filter's field re-render with the filtered series
 - **Multi-page**: bottom tabs to switch, `+` button to add, toolbar arrows for
   prev/next
+- **Style tab**: per-chart palette swatches (bar/pie/line), data-label
+  toggles, legend toggle + position, value-format selector
+- **Save**: toolbar Save button enables on dirty edits; the host wires up
+  persistence via the `onSave(dashboard)` option (async-aware, shows
+  Saving… → Saved feedback)
 - **Light/dark theming** via CSS custom properties (no MUI runtime overhead)
 
 ## What's not done yet
 
 - Real data-source integration (currently mock fields + mock series)
-- Save / Publish / Slug check (no persistence yet — edits are in-memory)
-- Style tab in Properties (colors, labels, legend — currently Setup only)
+- Publish / Slug check (host receives the dashboard via `onSave`; dashjs
+  itself doesn't persist)
 - KPI / Aggregation re-computation when filters apply (mock can't re-aggregate)
 - Drag fields from Data panel onto chart slots
 - Page rename / delete via right-click
@@ -136,7 +149,7 @@ npm run typecheck    # tsc --noEmit
 - [x] Phase B — Add-a-chart picker (toolbar)
 - [x] Phase C — Multi-page + drag/resize via gridstack.js
 - [x] Phase D — Filters (dashboard-level + chart-level)
-- [ ] Phase E — Style tab + explicit Save (`onSave(dashboard)` callback)
+- [x] Phase E — Style tab + explicit Save (`onSave(dashboard)` callback)
 - [ ] Phase F — Real data-source integration (replace mock fields/series)
 - [ ] Phase G — Drag fields from Data panel onto chart slots
 - [ ] Phase H — More chart types + stacked variants

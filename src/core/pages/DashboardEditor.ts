@@ -4,10 +4,11 @@
 // re-render the chart live.
 
 import { GridStack, type GridItemHTMLElement, type GridStackNode } from 'gridstack'
-import type { DashboardFull, DashboardChartRecord, ChartType, AggregationMode, DashboardPageRecord, DashboardFilter, FilterOperator } from '../domain'
+import type { DashboardFull, DashboardChartRecord, ChartType, AggregationMode, DashboardPageRecord, DashboardFilter, FilterOperator, ChartConfig } from '../domain'
 import { renderChart, type ChartHandle } from '../charts/renderChart'
 import { createDefaultChart } from '../charts/defaults'
 import { applyFilters } from '../charts/applyFilters'
+import { DEFAULT_PALETTE, paletteFor } from '../charts/palette'
 import { icon } from '../icons'
 import { MOCK_FIELDS, fieldTypeBadge, type DataField } from '../mockData'
 
@@ -18,6 +19,7 @@ const GRID_ROW_HEIGHT = 60
 export interface DashboardEditorContext {
   dashboard: DashboardFull
   dictionary?: Record<string, string>
+  onSave?: (dashboard: DashboardFull) => void | Promise<void>
 }
 
 type PanelKey = 'data' | 'properties'
@@ -38,6 +40,22 @@ const AGGREGATION_OPTIONS: { value: AggregationMode; label: string }[] = [
   { value: 'sum',        label: 'Sum' },
 ]
 
+const VALUE_FORMAT_OPTIONS: { value: NonNullable<NonNullable<ChartConfig['labels']>['valueFormat']>; label: string }[] = [
+  { value: 'number',   label: 'Number' },
+  { value: 'percent',  label: 'Percent' },
+  { value: 'decimal1', label: '1 decimal' },
+  { value: 'decimal2', label: '2 decimals' },
+]
+
+const LEGEND_POSITION_OPTIONS: { value: NonNullable<NonNullable<ChartConfig['labels']>['legendPosition']>; label: string }[] = [
+  { value: 'top',    label: 'Top' },
+  { value: 'bottom', label: 'Bottom' },
+  { value: 'left',   label: 'Left' },
+  { value: 'right',  label: 'Right' },
+]
+
+type PropTab = 'setup' | 'style'
+
 export class DashboardEditor {
   private root: HTMLElement
   private ctx: DashboardEditorContext
@@ -49,6 +67,10 @@ export class DashboardEditor {
   private panels: PanelState = { data: true, properties: false }
   private fieldQuery = ''
   private addChartOpen = false
+  private isDirty = false
+  private isSaving = false
+  private savedFlashTimer: number | null = null
+  private activePropTab: PropTab = 'setup'
   /** Bound listener so we can remove it cleanly when the popover closes. */
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null
   private escKeyHandler: ((e: KeyboardEvent) => void) | null = null
@@ -105,6 +127,10 @@ export class DashboardEditor {
   destroy(): void {
     this.closeAddChartPopover()
     this.closeFilterPopover()
+    if (this.savedFlashTimer) {
+      window.clearTimeout(this.savedFlashTimer)
+      this.savedFlashTimer = null
+    }
     this.disposeGrid()
     this.disposeCharts()
     this.root.innerHTML = ''
@@ -156,7 +182,26 @@ export class DashboardEditor {
         ${btn('shape', icon('shapes', { size: 16 }), t('editor.shape', 'Shape'), { iconOnly: true, dropdown: true })}
         <span class="dashjs-editor__spacer"></span>
         ${btn('theme', icon('palette', { size: 16 }), t('editor.theme', 'Theme and layout'))}
+        ${this.renderSaveButton(t)}
       </div>
+    `
+  }
+
+  private renderSaveButton(t: (k: string, f: string) => string): string {
+    const label = this.isSaving
+      ? t('editor.saving', 'Saving…')
+      : t('editor.save', 'Save')
+    const disabled = this.isSaving || !this.isDirty ? 'disabled' : ''
+    return `
+      <button
+        class="dashjs-editor__tbbtn dashjs-editor__tbbtn--primary"
+        data-tb="save"
+        ${disabled}
+        title="${t('editor.save', 'Save')}"
+      >
+        ${icon('save', { size: 16 })}
+        <span data-save-label>${label}</span>
+      </button>
     `
   }
 
@@ -342,6 +387,32 @@ export class DashboardEditor {
   }
 
   private renderPropertiesForChart(chart: DashboardChartRecord, t: (k: string, f: string) => string): string {
+    const body = this.activePropTab === 'style'
+      ? this.renderStyleTab(chart, t)
+      : this.renderSetupTab(chart, t)
+
+    return `
+      <div class="dashjs-panel">
+        <div class="dashjs-panel__header">
+          ${icon('pencil', { size: 16 })}
+          <span class="dashjs-panel__title">${t('editor.properties', 'Properties')}</span>
+        </div>
+        <div class="dashjs-tabs">
+          <button class="dashjs-tabs__btn ${this.activePropTab === 'setup' ? 'is-active' : ''}" data-prop-tab="setup">
+            ${t('editor.tabSetup', 'Setup')}
+          </button>
+          <button class="dashjs-tabs__btn ${this.activePropTab === 'style' ? 'is-active' : ''}" data-prop-tab="style">
+            ${t('editor.tabStyle', 'Style')}
+          </button>
+        </div>
+        <div class="dashjs-props">
+          ${body}
+        </div>
+      </div>
+    `
+  }
+
+  private renderSetupTab(chart: DashboardChartRecord, t: (k: string, f: string) => string): string {
     const cfg = chart.dashboard_chart_config ?? {}
     const dim = cfg.dimension
     const agg = cfg.aggregation ?? 'count'
@@ -367,74 +438,159 @@ export class DashboardEditor {
     `).join('')
 
     return `
-      <div class="dashjs-panel">
-        <div class="dashjs-panel__header">
-          ${icon('pencil', { size: 16 })}
-          <span class="dashjs-panel__title">${t('editor.properties', 'Properties')}</span>
-        </div>
-        <div class="dashjs-tabs">
-          <button class="dashjs-tabs__btn is-active">${t('editor.tabSetup', 'Setup')}</button>
-          <button class="dashjs-tabs__btn" disabled title="Phase E">${t('editor.tabStyle', 'Style')}</button>
-        </div>
-        <div class="dashjs-props">
-          <div class="dashjs-props__section">
-            <label class="dashjs-props__label">${t('editor.title', 'Title')}</label>
-            <input
-              class="dashjs-form__input"
-              type="text"
-              data-prop="title"
-              value="${escape(chart.dashboard_chart_title ?? '')}"
-            />
-          </div>
+      <div class="dashjs-props__section">
+        <label class="dashjs-props__label">${t('editor.title', 'Title')}</label>
+        <input
+          class="dashjs-form__input"
+          type="text"
+          data-prop="title"
+          value="${escape(chart.dashboard_chart_title ?? '')}"
+        />
+      </div>
 
-          <div class="dashjs-props__section">
-            <label class="dashjs-props__label">${t('editor.chartType', 'Chart type')}</label>
-            <div class="dashjs-typegrid">${typeOptions}</div>
-          </div>
+      <div class="dashjs-props__section">
+        <label class="dashjs-props__label">${t('editor.chartType', 'Chart type')}</label>
+        <div class="dashjs-typegrid">${typeOptions}</div>
+      </div>
 
-          <div class="dashjs-props__section">
-            <label class="dashjs-props__label">${t('editor.dimension', 'Dimension')}</label>
-            <select class="dashjs-form__input" data-prop="dimension">
-              <option value="">— None —</option>
-              ${dimensionOptions}
-            </select>
-          </div>
+      <div class="dashjs-props__section">
+        <label class="dashjs-props__label">${t('editor.dimension', 'Dimension')}</label>
+        <select class="dashjs-form__input" data-prop="dimension">
+          <option value="">— None —</option>
+          ${dimensionOptions}
+        </select>
+      </div>
 
-          <div class="dashjs-props__section">
-            <label class="dashjs-props__label">${t('editor.aggregation', 'Aggregation')}</label>
-            <select class="dashjs-form__input" data-prop="aggregation">
-              ${aggOptions}
-            </select>
-          </div>
+      <div class="dashjs-props__section">
+        <label class="dashjs-props__label">${t('editor.aggregation', 'Aggregation')}</label>
+        <select class="dashjs-form__input" data-prop="aggregation">
+          ${aggOptions}
+        </select>
+      </div>
 
-          <div class="dashjs-props__section">
-            <label class="dashjs-props__label">${t('editor.filters', 'Filters')}</label>
-            <div class="dashjs-props__chiplist">
-              ${(cfg.filters ?? []).map((f) => `
-                <div class="dashjs-editor__chip dashjs-editor__chip--inline" title="${escape(this.filterTooltip(f))}">
-                  ${icon('filter', { size: 12 })}
-                  <span>${escape(this.filterChipLabel(f))}</span>
-                  <span class="dashjs-editor__chip-x" data-chart-filter-remove="${f.id}" aria-label="Remove filter">
-                    ${icon('x', { size: 10 })}
-                  </span>
-                </div>
-              `).join('')}
+      <div class="dashjs-props__section">
+        <label class="dashjs-props__label">${t('editor.filters', 'Filters')}</label>
+        <div class="dashjs-props__chiplist">
+          ${(cfg.filters ?? []).map((f) => `
+            <div class="dashjs-editor__chip dashjs-editor__chip--inline" title="${escape(this.filterTooltip(f))}">
+              ${icon('filter', { size: 12 })}
+              <span>${escape(this.filterChipLabel(f))}</span>
+              <span class="dashjs-editor__chip-x" data-chart-filter-remove="${f.id}" aria-label="Remove filter">
+                ${icon('x', { size: 10 })}
+              </span>
             </div>
-            <button class="dashjs-btn" data-action="add-chart-filter">
-              ${icon('plus', { size: 12 })}
-              <span>${t('editor.addChartFilter', 'Add filter')}</span>
-            </button>
-          </div>
-
-          <div class="dashjs-props__section">
-            <button class="dashjs-btn dashjs-btn--danger" data-action="delete-chart">
-              ${icon('trash', { size: 14 })}
-              <span>${t('editor.deleteChart', 'Delete chart')}</span>
-            </button>
-          </div>
+          `).join('')}
         </div>
+        <button class="dashjs-btn" data-action="add-chart-filter">
+          ${icon('plus', { size: 12 })}
+          <span>${t('editor.addChartFilter', 'Add filter')}</span>
+        </button>
+      </div>
+
+      <div class="dashjs-props__section">
+        <button class="dashjs-btn dashjs-btn--danger" data-action="delete-chart">
+          ${icon('trash', { size: 14 })}
+          <span>${t('editor.deleteChart', 'Delete chart')}</span>
+        </button>
       </div>
     `
+  }
+
+  private renderStyleTab(chart: DashboardChartRecord, t: (k: string, f: string) => string): string {
+    const type = chart.dashboard_chart_type
+    if (type === 'table') {
+      return `
+        <div class="dashjs-panel__empty">
+          ${t('editor.styleTableEmpty', 'No style options for table charts yet.')}
+        </div>
+      `
+    }
+
+    const cfg = chart.dashboard_chart_config ?? {}
+    const labels = cfg.labels ?? {}
+    const showValuesDefault = type === 'kpi' ? false : (type === 'pie' ? true : (type === 'line' ? false : true))
+    const showLegendDefault = type === 'pie' || type === 'line'
+    const legendPosDefault: NonNullable<NonNullable<ChartConfig['labels']>['legendPosition']> = type === 'pie' ? 'right' : 'bottom'
+    const valueFormatDefault: NonNullable<NonNullable<ChartConfig['labels']>['valueFormat']> = type === 'pie' ? 'percent' : 'number'
+
+    const showValues = labels.showValues ?? showValuesDefault
+    const showLegend = labels.showLegend ?? showLegendDefault
+    const legendPos  = labels.legendPosition ?? legendPosDefault
+    const valueFmt   = labels.valueFormat ?? valueFormatDefault
+
+    const fmtOptions = VALUE_FORMAT_OPTIONS.map((o) => `
+      <option value="${o.value}" ${valueFmt === o.value ? 'selected' : ''}>${o.label}</option>
+    `).join('')
+
+    const legendPosOptions = LEGEND_POSITION_OPTIONS.map((o) => `
+      <option value="${o.value}" ${legendPos === o.value ? 'selected' : ''}>${o.label}</option>
+    `).join('')
+
+    // Colors section: bar/pie show full palette; line shows single colour;
+    // KPI has none.
+    let colorsSection = ''
+    if (type === 'bar' || type === 'pie') {
+      const palette = paletteFor(cfg)
+      const swatches = palette.map((color, i) => `
+        <label class="dashjs-swatch" title="${t('editor.colorSlot', 'Color')} ${i + 1}">
+          <input type="color" data-style="palette" data-index="${i}" value="${color}" />
+          <span class="dashjs-swatch__chip" style="background:${color}"></span>
+        </label>
+      `).join('')
+      colorsSection = `
+        <div class="dashjs-props__section">
+          <label class="dashjs-props__label">${t('editor.colors', 'Colors')}</label>
+          <div class="dashjs-swatches">${swatches}</div>
+          <button class="dashjs-btn" data-style="reset-palette">
+            ${icon('reset', { size: 12 })}
+            <span>${t('editor.resetPalette', 'Reset palette')}</span>
+          </button>
+        </div>
+      `
+    } else if (type === 'line') {
+      const palette = paletteFor(cfg)
+      colorsSection = `
+        <div class="dashjs-props__section">
+          <label class="dashjs-props__label">${t('editor.color', 'Color')}</label>
+          <label class="dashjs-swatch dashjs-swatch--single">
+            <input type="color" data-style="palette" data-index="0" value="${palette[0]}" />
+            <span class="dashjs-swatch__chip" style="background:${palette[0]}"></span>
+          </label>
+        </div>
+      `
+    }
+
+    // Labels section: KPI only needs value format; others get labels + legend.
+    const labelsSection = type === 'kpi' ? `
+      <div class="dashjs-props__section">
+        <label class="dashjs-props__label">${t('editor.valueFormat', 'Value format')}</label>
+        <select class="dashjs-form__input" data-style="valueFormat">${fmtOptions}</select>
+      </div>
+    ` : `
+      <div class="dashjs-props__section">
+        <label class="dashjs-props__label">${t('editor.labels', 'Labels')}</label>
+        <label class="dashjs-checkbox">
+          <input type="checkbox" data-style="showValues" ${showValues ? 'checked' : ''} />
+          <span>${t('editor.showValues', 'Show data labels')}</span>
+        </label>
+        <label class="dashjs-checkbox">
+          <input type="checkbox" data-style="showLegend" ${showLegend ? 'checked' : ''} />
+          <span>${t('editor.showLegend', 'Show legend')}</span>
+        </label>
+      </div>
+
+      <div class="dashjs-props__section" ${showLegend ? '' : 'hidden'}>
+        <label class="dashjs-props__label">${t('editor.legendPosition', 'Legend position')}</label>
+        <select class="dashjs-form__input" data-style="legendPosition">${legendPosOptions}</select>
+      </div>
+
+      <div class="dashjs-props__section">
+        <label class="dashjs-props__label">${t('editor.valueFormat', 'Value format')}</label>
+        <select class="dashjs-form__input" data-style="valueFormat">${fmtOptions}</select>
+      </div>
+    `
+
+    return `${colorsSection}${labelsSection}`
   }
 
   // --- behaviour ---
@@ -471,7 +627,68 @@ export class DashboardEditor {
       this.gotoPageRelative(+1)
     })
 
+    this.root.querySelector<HTMLButtonElement>('[data-tb="save"]')?.addEventListener('click', () => {
+      this.save()
+    })
+
     this.attachFilterBarEvents()
+  }
+
+  private markDirty(): void {
+    if (this.isDirty) return
+    this.isDirty = true
+    this.refreshSaveButton()
+  }
+
+  private refreshSaveButton(): void {
+    const t = (k: string, f: string) => this.ctx.dictionary?.[k] ?? f
+    const btn = this.root.querySelector<HTMLButtonElement>('[data-tb="save"]')
+    if (!btn) return
+    const label = btn.querySelector<HTMLElement>('[data-save-label]')
+    btn.disabled = this.isSaving || !this.isDirty
+    if (!label) return
+    if (this.isSaving) {
+      label.textContent = t('editor.saving', 'Saving…')
+    } else if (this.isDirty) {
+      label.textContent = t('editor.save', 'Save')
+    } else {
+      label.textContent = t('editor.save', 'Save')
+    }
+  }
+
+  private async save(): Promise<void> {
+    if (this.isSaving || !this.isDirty) return
+    const cb = this.ctx.onSave
+    // Deep-clone so the host can mutate safely without affecting the editor.
+    const snapshot: DashboardFull = JSON.parse(JSON.stringify(this.dashboard))
+    this.isSaving = true
+    this.refreshSaveButton()
+    try {
+      await cb?.(snapshot)
+      this.isDirty = false
+      this.flashSaved()
+    } catch (err) {
+      console.error('[dashjs] onSave failed', err)
+    } finally {
+      this.isSaving = false
+      this.refreshSaveButton()
+    }
+  }
+
+  /** Briefly show a "Saved" state after a successful save. */
+  private flashSaved(): void {
+    const t = (k: string, f: string) => this.ctx.dictionary?.[k] ?? f
+    const btn = this.root.querySelector<HTMLButtonElement>('[data-tb="save"]')
+    const label = btn?.querySelector<HTMLElement>('[data-save-label]')
+    if (!btn || !label) return
+    btn.classList.add('is-saved')
+    label.textContent = t('editor.saved', 'Saved')
+    if (this.savedFlashTimer) window.clearTimeout(this.savedFlashTimer)
+    this.savedFlashTimer = window.setTimeout(() => {
+      btn.classList.remove('is-saved')
+      this.refreshSaveButton()
+      this.savedFlashTimer = null
+    }, 1500)
   }
 
   private attachFilterBarEvents(): void {
@@ -484,7 +701,9 @@ export class DashboardEditor {
 
     // Reset clears all global filters.
     this.root.querySelector<HTMLButtonElement>('[data-tb="reset"]')?.addEventListener('click', () => {
+      if (!this.dashboard.filters || this.dashboard.filters.length === 0) return
       this.dashboard.filters = []
+      this.markDirty()
       this.refreshFilterBar()
       this.rerenderAllCharts()
     })
@@ -514,6 +733,7 @@ export class DashboardEditor {
 
   private removeGlobalFilter(id: string): void {
     this.dashboard.filters = (this.dashboard.filters ?? []).filter((f) => f.id !== id)
+    this.markDirty()
     this.refreshFilterBar()
     this.rerenderAllCharts()
   }
@@ -556,12 +776,25 @@ export class DashboardEditor {
     const host = this.root.querySelector<HTMLElement>('[data-panel-host="properties"]')
     if (!host) return
 
+    // Tab switcher (Setup / Style).
+    host.querySelectorAll<HTMLButtonElement>('[data-prop-tab]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.propTab as PropTab
+        if (tab === this.activePropTab) return
+        this.activePropTab = tab
+        this.refreshPanels()
+      })
+    })
+
+    this.attachStyleTabEvents(host)
+
     // Title input — re-render only the card header on change.
     const titleInput = host.querySelector<HTMLInputElement>('[data-prop="title"]')
     titleInput?.addEventListener('input', (e) => {
       const chart = this.selectedChart()
       if (!chart) return
       chart.dashboard_chart_title = (e.target as HTMLInputElement).value
+      this.markDirty()
       const cardTitle = this.root.querySelector<HTMLElement>(
         `[data-chart-id="${chart.dashboard_chart_id}"] .dashjs-card__title`,
       )
@@ -576,6 +809,7 @@ export class DashboardEditor {
         const nextType = btn.dataset.value as ChartType
         if (nextType === chart.dashboard_chart_type) return
         chart.dashboard_chart_type = nextType
+        this.markDirty()
         this.refreshPanels() // updates type tile active state
         this.rerenderChart(chart.dashboard_chart_id)
       })
@@ -594,6 +828,7 @@ export class DashboardEditor {
         const f = MOCK_FIELDS.find((m) => m.id === id)
         if (f) cfg.dimension = { questionCode: f.id, questionText: f.name, questionId: 0 }
       }
+      this.markDirty()
       this.rerenderChart(chart.dashboard_chart_id)
     })
 
@@ -604,6 +839,7 @@ export class DashboardEditor {
       if (!chart) return
       const cfg = (chart.dashboard_chart_config ??= {})
       cfg.aggregation = (e.target as HTMLSelectElement).value as AggregationMode
+      this.markDirty()
       this.rerenderChart(chart.dashboard_chart_id)
     })
 
@@ -627,6 +863,7 @@ export class DashboardEditor {
         if (cfg?.filters) {
           cfg.filters = cfg.filters.filter((f) => f.id !== id)
         }
+        this.markDirty()
         this.refreshPanels()
         this.rerenderChart(chart.dashboard_chart_id)
       })
@@ -637,6 +874,72 @@ export class DashboardEditor {
       const chart = this.selectedChart()
       if (!chart) return
       this.deleteChart(chart.dashboard_chart_id)
+    })
+  }
+
+  private attachStyleTabEvents(host: HTMLElement): void {
+    // Checkboxes — showValues, showLegend.
+    host.querySelectorAll<HTMLInputElement>('[data-style="showValues"], [data-style="showLegend"]').forEach((el) => {
+      el.addEventListener('change', () => {
+        const chart = this.selectedChart()
+        if (!chart) return
+        const cfg = (chart.dashboard_chart_config ??= {})
+        const labels = (cfg.labels ??= {})
+        const key = el.dataset.style as 'showValues' | 'showLegend'
+        labels[key] = el.checked
+        this.markDirty()
+        // Legend position row needs to show/hide when showLegend toggles.
+        if (key === 'showLegend') this.refreshPanels()
+        this.rerenderChart(chart.dashboard_chart_id)
+      })
+    })
+
+    // Selects — legendPosition, valueFormat.
+    host.querySelectorAll<HTMLSelectElement>('[data-style="legendPosition"], [data-style="valueFormat"]').forEach((el) => {
+      el.addEventListener('change', () => {
+        const chart = this.selectedChart()
+        if (!chart) return
+        const cfg = (chart.dashboard_chart_config ??= {})
+        const labels = (cfg.labels ??= {})
+        const key = el.dataset.style as 'legendPosition' | 'valueFormat'
+        ;(labels as any)[key] = el.value
+        this.markDirty()
+        this.rerenderChart(chart.dashboard_chart_id)
+      })
+    })
+
+    // Color swatches — palette[i] edit.
+    host.querySelectorAll<HTMLInputElement>('[data-style="palette"]').forEach((el) => {
+      el.addEventListener('input', () => {
+        const chart = this.selectedChart()
+        if (!chart) return
+        const idx = Number(el.dataset.index)
+        const cfg = (chart.dashboard_chart_config ??= {})
+        const colors = (cfg.colors ??= { palette: [...paletteFor(cfg)] })
+        // Make sure palette is long enough — clone from defaults if needed.
+        if (!colors.palette || colors.palette.length === 0) {
+          colors.palette = [...DEFAULT_PALETTE]
+        }
+        colors.palette[idx] = el.value
+        // Update the visual chip alongside the native input live.
+        const chip = el.parentElement?.querySelector<HTMLElement>('.dashjs-swatch__chip')
+        if (chip) chip.style.background = el.value
+        this.markDirty()
+        this.rerenderChart(chart.dashboard_chart_id)
+      })
+    })
+
+    // Reset palette button.
+    host.querySelector<HTMLButtonElement>('[data-style="reset-palette"]')?.addEventListener('click', () => {
+      const chart = this.selectedChart()
+      if (!chart) return
+      const cfg = chart.dashboard_chart_config
+      if (cfg?.colors) {
+        delete cfg.colors
+        this.markDirty()
+        this.refreshPanels()
+        this.rerenderChart(chart.dashboard_chart_id)
+      }
     })
   }
 
@@ -773,16 +1076,18 @@ export class DashboardEditor {
 
   private onGridChange(items: GridStackNode[]): void {
     const charts = this.activePage().charts ?? []
+    let changed = false
     for (const it of items) {
       const id = Number((it.el as HTMLElement | undefined)?.dataset?.chartId)
       if (!id) continue
       const chart = charts.find((c) => c.dashboard_chart_id === id)
       if (!chart) continue
-      if (typeof it.x === 'number') chart.dashboard_chart_x = it.x
-      if (typeof it.y === 'number') chart.dashboard_chart_y = it.y
-      if (typeof it.w === 'number') chart.dashboard_chart_w = it.w
-      if (typeof it.h === 'number') chart.dashboard_chart_h = it.h
+      if (typeof it.x === 'number' && chart.dashboard_chart_x !== it.x) { chart.dashboard_chart_x = it.x; changed = true }
+      if (typeof it.y === 'number' && chart.dashboard_chart_y !== it.y) { chart.dashboard_chart_y = it.y; changed = true }
+      if (typeof it.w === 'number' && chart.dashboard_chart_w !== it.w) { chart.dashboard_chart_w = it.w; changed = true }
+      if (typeof it.h === 'number' && chart.dashboard_chart_h !== it.h) { chart.dashboard_chart_h = it.h; changed = true }
     }
+    if (changed) this.markDirty()
     // After move/resize finishes, reflow charts whose containers changed size.
     for (const it of items) {
       this.reflowChartIn(it.el as GridItemHTMLElement)
@@ -830,6 +1135,7 @@ export class DashboardEditor {
       dashboard_page_name: `Page ${nextId}`,
       charts: [],
     })
+    this.markDirty()
     this.activePageId = nextId
     this.selectedChartId = null
     this.remountActivePage()
@@ -1003,6 +1309,7 @@ export class DashboardEditor {
 
       if (target.target === 'dashboard') {
         (this.dashboard.filters ??= []).push(filter)
+        this.markDirty()
         this.refreshFilterBar()
         this.rerenderAllCharts()
       } else {
@@ -1010,6 +1317,7 @@ export class DashboardEditor {
         if (chart) {
           const cfg = (chart.dashboard_chart_config ??= {})
           ;(cfg.filters ??= []).push(filter)
+          this.markDirty()
           this.refreshPanels()
           this.rerenderChart(chart.dashboard_chart_id)
         }
@@ -1068,6 +1376,7 @@ export class DashboardEditor {
       y: nextY,
     })
     charts.push(newChart)
+    this.markDirty()
 
     this.remountActivePage()
     this.selectChart(newChart.dashboard_chart_id)
@@ -1083,6 +1392,7 @@ export class DashboardEditor {
     const page = this.activePage()
     if (!page.charts) return
     page.charts = page.charts.filter((c) => c.dashboard_chart_id !== id)
+    this.markDirty()
     this.selectedChartId = null
     this.remountActivePage()
     this.refreshPanels()

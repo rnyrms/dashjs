@@ -6,6 +6,12 @@ const root = document.getElementById('app')!
 const instance = dashjs(root, {
   mode: 'editor',
   dashboard: MOCK_DASHBOARD,
+  onSave: async (dashboard) => {
+    // Simulate a network round-trip so we can see the "Saving…" state.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    console.log('[demo] onSave', dashboard)
+    ;(window as any).lastSavedDashboard = dashboard
+  },
 })
 
 // Light/dark toggle in the demo header.

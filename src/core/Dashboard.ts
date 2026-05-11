@@ -79,6 +79,7 @@ export class Dashboard {
         const editor = new DashboardEditor(this.root, {
           dashboard: this.options.dashboard ?? defaultDashboard(),
           dictionary: this.options.dictionary,
+          onSave: this.options.onSave,
         })
         editor.render()
         this.page = editor

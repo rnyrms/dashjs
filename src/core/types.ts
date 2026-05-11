@@ -30,6 +30,8 @@ export interface DashJsOptions {
   onOpen?: (dashboard: DashboardRecord) => void
   /** Called after a dashboard is deleted. */
   onDelete?: (id: number) => void
+  /** Called when the user explicitly saves in editor mode. Receives a deep clone. */
+  onSave?: (dashboard: DashboardFull) => void | Promise<void>
 }
 
 export interface DashJsInstance {
