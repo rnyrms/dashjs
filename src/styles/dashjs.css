@@ -404,6 +404,80 @@
   min-height: 0;
 }
 
+/* --- Control widgets ----------------------------------------------- */
+.dashjs-card--control .grid-stack-item-content {
+  border-left: 3px solid var(--dashjs-accent);
+}
+.dashjs-control__body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 8px 12px;
+  gap: 6px;
+}
+.dashjs-control__field {
+  font-size: 11px;
+  color: var(--dashjs-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+.dashjs-control__select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--dashjs-border);
+  border-radius: 4px;
+  background: var(--dashjs-bg);
+  color: var(--dashjs-text);
+  font: inherit;
+  font-size: 13px;
+}
+.dashjs-control__list {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--dashjs-border);
+  border-radius: 4px;
+  padding: 4px;
+  min-height: 0;
+}
+.dashjs-control__checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.dashjs-control__checkbox:hover { background: var(--dashjs-bg-hover); }
+.dashjs-control__checkbox input { margin: 0; cursor: pointer; }
+.dashjs-control__empty {
+  padding: 12px;
+  color: var(--dashjs-text-muted);
+  font-size: 12px;
+  text-align: center;
+  font-style: italic;
+}
+.dashjs-control__daterow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dashjs-control__date {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid var(--dashjs-border);
+  border-radius: 4px;
+  background: var(--dashjs-bg);
+  color: var(--dashjs-text);
+  font: inherit;
+  font-size: 12px;
+}
+.dashjs-control__daterow-sep {
+  color: var(--dashjs-text-muted);
+}
+
 /* KPI card content */
 .dashjs-kpi {
   display: flex;
@@ -710,6 +784,11 @@
   color: var(--dashjs-text-muted);
   margin-bottom: 6px;
   font-weight: 500;
+}
+.dashjs-props__readonly {
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--dashjs-text);
 }
 /* --- Slot chips (Looker-style dimension/metric pills) ---------------
    Anatomy:

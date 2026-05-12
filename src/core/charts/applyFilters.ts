@@ -40,5 +40,12 @@ function matches(label: string, f: DashboardFilter): boolean {
     case 'not_in': return !f.values.includes(label)
     case 'eq':     return f.values[0] === label
     case 'neq':    return f.values[0] !== label
+    case 'between': {
+      // values = [start, end]; either bound may be empty meaning open.
+      const [start, end] = f.values
+      if (start && label < start) return false
+      if (end && label > end) return false
+      return true
+    }
   }
 }

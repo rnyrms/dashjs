@@ -44,8 +44,9 @@ export type ChartType =
 /** Aggregation mode applied to the chart's dimension. */
 export type AggregationMode = 'count' | 'percentage' | 'mean' | 'sum'
 
-/** Filter operator. Phase D supports `in` only; more come later. */
-export type FilterOperator = 'in' | 'not_in' | 'eq' | 'neq'
+/** Filter operator. `between` carries `values = [start, end]` and is used
+ *  by date-range controls; the others use `values` as a string list. */
+export type FilterOperator = 'in' | 'not_in' | 'eq' | 'neq' | 'between'
 
 /** A filter applied to a dataset. `fieldId` matches a chart's `dimension.questionCode`. */
 export interface DashboardFilter {
@@ -54,6 +55,35 @@ export interface DashboardFilter {
   fieldName: string
   operator: FilterOperator
   values: string[]
+  /** Set when the filter was emitted by an on-canvas control. Lets the
+   *  editor find + replace the right filter row when the control's value
+   *  changes. Plain user-added filters leave this undefined. */
+  controlId?: number
+}
+
+/** On-canvas interactive widget (dropdown, multi-select, etc.). Lives on
+ *  the same gridstack canvas as charts; changing its value updates
+ *  `DashboardFull.filters` and re-renders every chart that reads that
+ *  field. Only `dropdown` ships in v1. */
+export type ControlType = 'dropdown' | 'multiselect' | 'daterange' | 'search'
+
+export interface DashboardControlRecord {
+  dashboard_control_id: number
+  dashboard_page_id: number
+  dashboard_control_type: ControlType
+  dashboard_control_title?: string
+  /** Grid position — same units as charts. */
+  dashboard_control_x?: number
+  dashboard_control_y?: number
+  dashboard_control_w?: number
+  dashboard_control_h?: number
+  dashboard_control_config?: {
+    /** Bound field — drives the option list and the emitted filter. */
+    field?: { id: string; name: string }
+    /** Current viewer selection — single value for dropdown; array for
+     *  multiselect; ISO date pair for daterange. Empty/undefined = no filter. */
+    selectedValues?: string[]
+  }
 }
 
 export interface ChartDimension {
@@ -127,6 +157,7 @@ export interface DashboardPageRecord {
   dashboard_page_id: number
   dashboard_page_name: string
   charts?: DashboardChartRecord[]
+  controls?: DashboardControlRecord[]
 }
 
 export interface DashboardRecord {

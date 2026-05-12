@@ -4,7 +4,7 @@
 // re-render the chart live.
 
 import { GridStack, type GridItemHTMLElement, type GridStackNode } from 'gridstack'
-import type { DashboardFull, DashboardChartRecord, ChartType, AggregationMode, DashboardPageRecord, DashboardFilter, FilterOperator, ChartConfig } from '../domain'
+import type { DashboardFull, DashboardChartRecord, DashboardControlRecord, ControlType, ChartType, AggregationMode, DashboardPageRecord, DashboardFilter, FilterOperator, ChartConfig } from '../domain'
 import type { DashJsDataSource, DataField } from '../types'
 import { renderChart, type ChartHandle } from '../charts/renderChart'
 import { createDefaultChart } from '../charts/defaults'
@@ -12,6 +12,7 @@ import { applyFilters } from '../charts/applyFilters'
 import { DEFAULT_PALETTE, paletteFor } from '../charts/palette'
 import { parseCsv } from '../charts/csv'
 import { CHART_TYPE_SCHEMAS, readSlot, type SlotSpec } from '../charts/slots'
+import { renderControl, createDefaultControl, controlToFilter, type ControlHandle } from '../charts/controls'
 import { icon } from '../icons'
 import { MOCK_FIELDS, fieldTypeBadge } from '../mockData'
 
@@ -83,6 +84,12 @@ const AGG_SHORT_LABEL: Record<AggregationMode, string> = {
   mean:       'AVG',
 }
 
+const CONTROL_TYPE_OPTIONS: { type: ControlType; label: string; iconKey: string }[] = [
+  { type: 'dropdown',    label: 'Dropdown',     iconKey: 'chevron-down' },
+  { type: 'multiselect', label: 'Multi-select', iconKey: 'filter' },
+  { type: 'daterange',   label: 'Date range',   iconKey: 'calendar' },
+]
+
 const VALUE_FORMAT_OPTIONS: { value: NonNullable<NonNullable<ChartConfig['labels']>['valueFormat']>; label: string }[] = [
   { value: 'number',   label: 'Number' },
   { value: 'percent',  label: 'Percent' },
@@ -104,7 +111,10 @@ export class DashboardEditor {
   private ctx: DashboardEditorContext
   private dashboard: DashboardFull
   private chartHandles = new Map<number, ChartHandle>()
+  private controlHandles = new Map<number, ControlHandle>()
   private selectedChartId: number | null = null
+  private selectedControlId: number | null = null
+  private addControlOpen = false
   private activePageId: number
   private grid: GridStack | null = null
   private panels: PanelState = { data: false, properties: false }
@@ -113,6 +123,9 @@ export class DashboardEditor {
   private isDirty = false
   private isSaving = false
   private savedFlashTimer: number | null = null
+  /** Document-level keydown handler — Delete/Backspace on selected
+   *  chart or control. Held here so destroy() can detach it. */
+  private keyboardHandler: ((e: KeyboardEvent) => void) | null = null
   private activePropTab: PropTab = 'setup'
   /** Field catalogue — sourced from ctx.dataSource.listFields() when present,
    *  else MOCK_FIELDS. Updated asynchronously after construction. */
@@ -183,10 +196,30 @@ export class DashboardEditor {
     this.initGrid()
     this.mountAllCharts()
     this.attachEvents()
+    this.attachKeyboardShortcuts()
     this.updatePageLabel()
     // Refresh field catalogue from the data source if one is provided.
     // Runs async; we don't block the initial render.
     void this.loadFields()
+  }
+
+  /** Delete/Backspace deletes the currently-selected chart or control.
+   *  Ignored when focus is in an editable element so users editing
+   *  titles/inputs don't accidentally wipe a chart. */
+  private attachKeyboardShortcuts(): void {
+    this.keyboardHandler = (e: KeyboardEvent) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return
+      const target = e.target as HTMLElement | null
+      if (target && target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]')) return
+      if (this.selectedControlId !== null) {
+        e.preventDefault()
+        this.deleteControl(this.selectedControlId)
+      } else if (this.selectedChartId !== null) {
+        e.preventDefault()
+        this.deleteChart(this.selectedChartId)
+      }
+    }
+    document.addEventListener('keydown', this.keyboardHandler)
   }
 
   /** Pull the field catalogue from the data source (when present). On
@@ -207,10 +240,15 @@ export class DashboardEditor {
 
   destroy(): void {
     this.closeAddChartPopover()
+    this.closeAddControlPopover()
     this.closeFilterPopover()
     if (this.savedFlashTimer) {
       window.clearTimeout(this.savedFlashTimer)
       this.savedFlashTimer = null
+    }
+    if (this.keyboardHandler) {
+      document.removeEventListener('keydown', this.keyboardHandler)
+      this.keyboardHandler = null
     }
     this.disposeGrid()
     this.disposeCharts()
@@ -317,6 +355,10 @@ export class DashboardEditor {
   }
 
   private filterChipLabel(f: DashboardFilter): string {
+    if (f.operator === 'between') {
+      const [start, end] = f.values
+      return `${f.fieldName}: ${start || '…'} → ${end || '…'}`
+    }
     const op = f.operator === 'in' ? '∈' : f.operator === 'not_in' ? '∉' : f.operator === 'eq' ? '=' : '≠'
     const vals = f.values.length > 2 ? `${f.values.slice(0, 2).join(', ')} +${f.values.length - 2}` : f.values.join(', ')
     return `${f.fieldName} ${op} ${vals}`
@@ -362,6 +404,7 @@ export class DashboardEditor {
         </div>
         <div class="grid-stack" data-grid-root>
           ${(page.charts ?? []).map((c) => this.renderChartCard(c)).join('')}
+          ${(page.controls ?? []).map((c) => this.renderControlCard(c)).join('')}
         </div>
       </div>
     `
@@ -383,6 +426,26 @@ export class DashboardEditor {
         <div class="grid-stack-item-content dashjs-card__inner">
           <div class="dashjs-card__title">${escape(c.dashboard_chart_title ?? 'Untitled')}</div>
           <div class="dashjs-card__body" data-chart-body></div>
+        </div>
+      </div>
+    `
+  }
+
+  private renderControlCard(c: DashboardControlRecord): string {
+    const w = c.dashboard_control_w ?? 4
+    const h = c.dashboard_control_h ?? 2
+    const x = c.dashboard_control_x ?? 0
+    const y = c.dashboard_control_y ?? 0
+    const selected = this.selectedControlId === c.dashboard_control_id ? 'is-selected' : ''
+    return `
+      <div
+        class="grid-stack-item dashjs-card dashjs-card--chart dashjs-card--control ${selected}"
+        data-control-id="${c.dashboard_control_id}"
+        gs-x="${x}" gs-y="${y}" gs-w="${w}" gs-h="${h}"
+      >
+        <div class="grid-stack-item-content dashjs-card__inner">
+          <div class="dashjs-card__title">${escape(c.dashboard_control_title ?? 'Control')}</div>
+          <div class="dashjs-card__body" data-control-body></div>
         </div>
       </div>
     `
@@ -452,6 +515,8 @@ export class DashboardEditor {
   }
 
   private renderPropertiesPanel(t: (k: string, f: string) => string): string {
+    const control = this.selectedControl()
+    if (control) return this.renderPropertiesForControl(control, t)
     const chart = this.selectedChart()
     if (!chart) {
       return `
@@ -471,6 +536,72 @@ export class DashboardEditor {
       `
     }
     return this.renderPropertiesForChart(chart, t)
+  }
+
+  /** Properties panel content when a control is selected. Title input, a
+   *  read-only type badge, a dimension-style field chip (clickable to
+   *  swap field / clear), and a Delete button. */
+  private renderPropertiesForControl(control: DashboardControlRecord, t: (k: string, f: string) => string): string {
+    const cfg = control.dashboard_control_config ?? {}
+    const field = cfg.field ? this.fields.find((f) => f.id === cfg.field!.id) : undefined
+    const typeLabel = CONTROL_TYPE_OPTIONS.find((o) => o.type === control.dashboard_control_type)?.label ?? control.dashboard_control_type
+
+    let fieldChip = ''
+    if (!field) {
+      fieldChip = `
+        <button class="dashjs-chip dashjs-chip--empty dashjs-chip--dim"
+                data-control-field-chip data-chip-action="open-field">
+          ${icon('plus', { size: 12 })}
+          <span>Add field</span>
+        </button>
+      `
+    } else {
+      const badge = fieldTypeBadge(field.type)
+      fieldChip = `
+        <div class="dashjs-chip dashjs-chip--dim" data-control-field-chip>
+          <span class="dashjs-chip__badge dashjs-chip__badge--dim" style="background:${badge.color}">${badge.label}</span>
+          <button class="dashjs-chip__name" data-chip-action="open-field" title="${escape(field.name)}">${escape(field.name)}</button>
+          <button class="dashjs-chip__x" data-chip-action="remove" aria-label="Remove">${icon('x', { size: 10 })}</button>
+        </div>
+      `
+    }
+
+    return `
+      <div class="dashjs-panel">
+        <div class="dashjs-panel__header">
+          ${icon('pencil', { size: 16 })}
+          <span class="dashjs-panel__title">${t('editor.properties', 'Properties')}</span>
+        </div>
+        <div class="dashjs-props">
+          <div class="dashjs-props__section">
+            <label class="dashjs-props__label">${t('editor.title', 'Title')}</label>
+            <input
+              class="dashjs-form__input"
+              type="text"
+              data-prop="control-title"
+              value="${escape(control.dashboard_control_title ?? '')}"
+            />
+          </div>
+
+          <div class="dashjs-props__section">
+            <label class="dashjs-props__label">${t('editor.controlType', 'Control type')}</label>
+            <div class="dashjs-props__readonly">${escape(typeLabel)}</div>
+          </div>
+
+          <div class="dashjs-props__section">
+            <label class="dashjs-props__label">${t('editor.field', 'Field')}</label>
+            ${fieldChip}
+          </div>
+
+          <div class="dashjs-props__section">
+            <button class="dashjs-btn dashjs-btn--danger" data-action="delete-control">
+              ${icon('trash', { size: 14 })}
+              <span>${t('editor.deleteControl', 'Delete control')}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `
   }
 
   /** Tile grid shared by the toolbar "Add a chart" popover and the
@@ -790,6 +921,12 @@ export class DashboardEditor {
       this.toggleAddChartPopover(addChartBtn)
     })
 
+    const addControlBtn = this.root.querySelector<HTMLButtonElement>('[data-tb="add-control"]')
+    addControlBtn?.addEventListener('click', (e) => {
+      e.stopPropagation()
+      this.toggleAddControlPopover(addControlBtn)
+    })
+
     // Page navigation arrows.
     this.root.querySelector<HTMLButtonElement>('[data-tb="prev"]')?.addEventListener('click', () => {
       this.gotoPageRelative(-1)
@@ -960,7 +1097,7 @@ export class DashboardEditor {
   }
 
   private attachCanvasEvents(): void {
-    // Click a chart card → select it.
+    // Chart cards — click to select, drop to bind a field as primary dimension.
     this.root.querySelectorAll<HTMLElement>('[data-chart-id]').forEach((card) => {
       card.addEventListener('click', (e) => {
         e.stopPropagation()
@@ -968,38 +1105,58 @@ export class DashboardEditor {
         this.selectChart(id)
       })
 
-      // Field-drop target: dragover/drop fires only when the drag has our
-      // custom field MIME type (ignores gridstack's own item drag).
-      card.addEventListener('dragenter', (e) => {
-        if (!this.isFieldDrag(e)) return
-        e.preventDefault()
-        card.classList.add('is-drop-target')
-      })
-      card.addEventListener('dragover', (e) => {
-        if (!this.isFieldDrag(e)) return
-        e.preventDefault()
-        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
-      })
-      card.addEventListener('dragleave', (e) => {
-        // Ignore dragleave when entering a descendant; only remove when
-        // leaving the card boundary entirely.
-        if (card.contains(e.relatedTarget as Node | null)) return
-        card.classList.remove('is-drop-target')
-      })
-      card.addEventListener('drop', (e) => {
-        if (!this.isFieldDrag(e)) return
-        e.preventDefault()
-        card.classList.remove('is-drop-target')
-        const fid = e.dataTransfer?.getData('text/x-dashjs-field')
-        if (!fid) return
+      this.bindFieldDropTarget(card, (fid) => {
         const id = Number(card.dataset.chartId)
         this.applyFieldToChart(id, fid)
       })
     })
-    // Click empty canvas → deselect.
+
+    // Control cards — click to select, drop to bind a field as the control's source.
+    this.root.querySelectorAll<HTMLElement>('[data-control-id]').forEach((card) => {
+      card.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const id = Number(card.dataset.controlId)
+        this.selectControl(id)
+      })
+
+      this.bindFieldDropTarget(card, (fid) => {
+        const id = Number(card.dataset.controlId)
+        this.applyFieldToControl(id, fid)
+      })
+    })
+
+    // Click empty canvas → deselect everything.
     this.root.querySelector<HTMLElement>('[data-canvas]')?.addEventListener('click', (e) => {
-      if ((e.target as HTMLElement).closest('[data-chart-id]')) return
+      const target = e.target as HTMLElement
+      if (target.closest('[data-chart-id]') || target.closest('[data-control-id]')) return
       this.selectChart(null)
+      this.selectControl(null)
+    })
+  }
+
+  /** Shared field-drop wiring for chart + control cards. The callback
+   *  receives the dragged field id when the drop completes. */
+  private bindFieldDropTarget(card: HTMLElement, onDropField: (fieldId: string) => void): void {
+    card.addEventListener('dragenter', (e) => {
+      if (!this.isFieldDrag(e)) return
+      e.preventDefault()
+      card.classList.add('is-drop-target')
+    })
+    card.addEventListener('dragover', (e) => {
+      if (!this.isFieldDrag(e)) return
+      e.preventDefault()
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+    })
+    card.addEventListener('dragleave', (e) => {
+      if (card.contains(e.relatedTarget as Node | null)) return
+      card.classList.remove('is-drop-target')
+    })
+    card.addEventListener('drop', (e) => {
+      if (!this.isFieldDrag(e)) return
+      e.preventDefault()
+      card.classList.remove('is-drop-target')
+      const fid = e.dataTransfer?.getData('text/x-dashjs-field')
+      if (fid) onDropField(fid)
     })
   }
 
@@ -1128,6 +1285,7 @@ export class DashboardEditor {
     })
 
     this.attachStyleTabEvents(host)
+    this.attachControlPropertyEvents(host)
 
     // Title input — re-render only the card header on change.
     const titleInput = host.querySelector<HTMLInputElement>('[data-prop="title"]')
@@ -1285,13 +1443,16 @@ export class DashboardEditor {
   private selectChart(id: number | null): void {
     if (this.selectedChartId === id) return
     this.selectedChartId = id
+    // Selecting a chart deselects any control (mutually exclusive).
+    if (id !== null) this.selectedControlId = null
 
-    // Update card visual state.
     this.root.querySelectorAll<HTMLElement>('[data-chart-id]').forEach((card) => {
       card.classList.toggle('is-selected', Number(card.dataset.chartId) === id)
     })
+    this.root.querySelectorAll<HTMLElement>('[data-control-id]').forEach((card) => {
+      card.classList.remove('is-selected')
+    })
 
-    // Auto-open Properties panel on select.
     if (id !== null && !this.panels.properties) {
       this.panels.properties = true
     }
@@ -1302,6 +1463,48 @@ export class DashboardEditor {
     if (this.selectedChartId === null) return null
     const charts = this.dashboard.pages[0]?.charts ?? []
     return charts.find((c) => c.dashboard_chart_id === this.selectedChartId) ?? null
+  }
+
+  private selectControl(id: number | null): void {
+    if (this.selectedControlId === id) return
+    this.selectedControlId = id
+    if (id !== null) this.selectedChartId = null
+
+    this.root.querySelectorAll<HTMLElement>('[data-control-id]').forEach((card) => {
+      card.classList.toggle('is-selected', Number(card.dataset.controlId) === id)
+    })
+    this.root.querySelectorAll<HTMLElement>('[data-chart-id]').forEach((card) => {
+      card.classList.remove('is-selected')
+    })
+
+    if (id !== null && !this.panels.properties) {
+      this.panels.properties = true
+    }
+    this.refreshPanels()
+  }
+
+  private selectedControl(): DashboardControlRecord | null {
+    if (this.selectedControlId === null) return null
+    return this.activePage().controls?.find((c) => c.dashboard_control_id === this.selectedControlId) ?? null
+  }
+
+  /** Bind a field to a control via drag-drop. Sets the control's field +
+   *  resets its current selection (different field invalidates old values). */
+  private applyFieldToControl(controlId: number, fieldId: string): void {
+    const control = this.activePage().controls?.find((c) => c.dashboard_control_id === controlId)
+    if (!control) return
+    const field = this.fields.find((f) => f.id === fieldId)
+    if (!field) return
+    const cfg = (control.dashboard_control_config ??= {})
+    cfg.field = { id: field.id, name: field.name }
+    cfg.selectedValues = []
+    this.markDirty()
+    // If this control was emitting a filter, drop it.
+    this.dashboard.filters = (this.dashboard.filters ?? []).filter((f) => f.controlId !== controlId)
+    this.refreshFilterBar()
+    this.rerenderControl(controlId)
+    this.rerenderAllCharts()
+    this.selectControl(controlId)
   }
 
   private rerenderChart(id: number): void {
@@ -1400,6 +1603,12 @@ export class DashboardEditor {
     for (const f of filters) {
       rows = rows.filter((r) => {
         const v = String(r[f.fieldId] ?? '')
+        if (f.operator === 'between') {
+          const [start, end] = f.values
+          if (start && v < start) return false
+          if (end && v > end) return false
+          return true
+        }
         const inSet = f.values.includes(v)
         return f.operator === 'in' || f.operator === 'eq' ? inSet : !inSet
       })
@@ -1484,6 +1693,9 @@ export class DashboardEditor {
     for (const c of this.activePage().charts ?? []) {
       void this.mountChart(c.dashboard_chart_id)
     }
+    for (const c of this.activePage().controls ?? []) {
+      this.mountControl(c.dashboard_control_id)
+    }
   }
 
   /** Re-render every chart on the active page (used when global filters change). */
@@ -1498,6 +1710,70 @@ export class DashboardEditor {
       try { h.destroy() } catch { /* ignore */ }
     }
     this.chartHandles.clear()
+    for (const h of this.controlHandles.values()) {
+      try { h.destroy() } catch { /* ignore */ }
+    }
+    this.controlHandles.clear()
+  }
+
+  /** Mount or remount one control. Wires the change handler to
+   *  emitControlChange() which updates dashboard.filters and re-renders
+   *  every chart that reads the bound field. */
+  private mountControl(id: number): void {
+    const control = this.activePage().controls?.find((c) => c.dashboard_control_id === id)
+    if (!control) return
+
+    this.controlHandles.get(id)?.destroy()
+    this.controlHandles.delete(id)
+
+    const body = this.root.querySelector<HTMLElement>(
+      `[data-control-id="${id}"] [data-control-body]`,
+    )
+    if (!body) return
+
+    const options = this.getFieldDistinctValues(control.dashboard_control_config?.field?.id)
+    const handle = renderControl(body, control, {
+      options,
+      onChange: (values) => this.emitControlChange(id, values),
+    })
+    this.controlHandles.set(id, handle)
+  }
+
+  private rerenderControl(id: number): void {
+    this.mountControl(id)
+  }
+
+  /** Persist the selection on the control + sync the dashboard's filter list:
+   *  drop any existing filter row that came from this control, then add the
+   *  new one (when non-empty), then re-render every chart. */
+  private emitControlChange(controlId: number, selectedValues: string[]): void {
+    const control = this.activePage().controls?.find((c) => c.dashboard_control_id === controlId)
+    if (!control) return
+    const cfg = (control.dashboard_control_config ??= {})
+    cfg.selectedValues = selectedValues
+    const filters = (this.dashboard.filters ??= [])
+    // Remove old filter row from this control (if any).
+    const idx = filters.findIndex((f) => f.controlId === controlId)
+    if (idx >= 0) filters.splice(idx, 1)
+    // Add new filter row if a selection is active.
+    const next = controlToFilter(control, selectedValues)
+    if (next) filters.push(next)
+    this.markDirty()
+    this.refreshFilterBar()
+    this.rerenderAllCharts()
+  }
+
+  /** Distinct values for a field, sourced from uploaded CSV rows. When
+   *  no CSV is loaded the list is empty — controls in mock-only mode show
+   *  a "no values available" placeholder. */
+  private getFieldDistinctValues(fieldId: string | undefined): string[] {
+    if (!fieldId || !this.csvData) return []
+    const set = new Set<string>()
+    for (const row of this.csvData.rows) {
+      const v = String(row[fieldId] ?? '').trim()
+      if (v !== '') set.add(v)
+    }
+    return Array.from(set).sort()
   }
 
   // --- gridstack ---
@@ -1536,19 +1812,30 @@ export class DashboardEditor {
 
   private onGridChange(items: GridStackNode[]): void {
     const charts = this.activePage().charts ?? []
+    const controls = this.activePage().controls ?? []
     let changed = false
     for (const it of items) {
-      const id = Number((it.el as HTMLElement | undefined)?.dataset?.chartId)
-      if (!id) continue
-      const chart = charts.find((c) => c.dashboard_chart_id === id)
-      if (!chart) continue
-      if (typeof it.x === 'number' && chart.dashboard_chart_x !== it.x) { chart.dashboard_chart_x = it.x; changed = true }
-      if (typeof it.y === 'number' && chart.dashboard_chart_y !== it.y) { chart.dashboard_chart_y = it.y; changed = true }
-      if (typeof it.w === 'number' && chart.dashboard_chart_w !== it.w) { chart.dashboard_chart_w = it.w; changed = true }
-      if (typeof it.h === 'number' && chart.dashboard_chart_h !== it.h) { chart.dashboard_chart_h = it.h; changed = true }
+      const el = it.el as HTMLElement | undefined
+      const chartId = Number(el?.dataset?.chartId)
+      const controlId = Number(el?.dataset?.controlId)
+      if (chartId) {
+        const chart = charts.find((c) => c.dashboard_chart_id === chartId)
+        if (!chart) continue
+        if (typeof it.x === 'number' && chart.dashboard_chart_x !== it.x) { chart.dashboard_chart_x = it.x; changed = true }
+        if (typeof it.y === 'number' && chart.dashboard_chart_y !== it.y) { chart.dashboard_chart_y = it.y; changed = true }
+        if (typeof it.w === 'number' && chart.dashboard_chart_w !== it.w) { chart.dashboard_chart_w = it.w; changed = true }
+        if (typeof it.h === 'number' && chart.dashboard_chart_h !== it.h) { chart.dashboard_chart_h = it.h; changed = true }
+      } else if (controlId) {
+        const control = controls.find((c) => c.dashboard_control_id === controlId)
+        if (!control) continue
+        if (typeof it.x === 'number' && control.dashboard_control_x !== it.x) { control.dashboard_control_x = it.x; changed = true }
+        if (typeof it.y === 'number' && control.dashboard_control_y !== it.y) { control.dashboard_control_y = it.y; changed = true }
+        if (typeof it.w === 'number' && control.dashboard_control_w !== it.w) { control.dashboard_control_w = it.w; changed = true }
+        if (typeof it.h === 'number' && control.dashboard_control_h !== it.h) { control.dashboard_control_h = it.h; changed = true }
+      }
     }
     if (changed) this.markDirty()
-    // After move/resize finishes, reflow charts whose containers changed size.
+    // After move/resize finishes, reflow charts/controls whose containers changed size.
     for (const it of items) {
       this.reflowChartIn(it.el as GridItemHTMLElement)
     }
@@ -1556,12 +1843,11 @@ export class DashboardEditor {
 
   private reflowChartIn(el: GridItemHTMLElement | undefined): void {
     if (!el) return
-    const id = Number(el.dataset.chartId)
-    if (!id) return
-    const handle = this.chartHandles.get(id) as { highchart?: { reflow(): void } } | undefined
-    // Easiest: just rerender. Highcharts is fast enough; Jspreadsheet stays
-    // consistent with new column widths.
-    this.rerenderChart(id)
+    if (el.dataset.chartId) {
+      this.rerenderChart(Number(el.dataset.chartId))
+    } else if (el.dataset.controlId) {
+      this.rerenderControl(Number(el.dataset.controlId))
+    }
   }
 
   // --- page tabs ---
@@ -1676,6 +1962,242 @@ export class DashboardEditor {
       document.removeEventListener('keydown', this.escKeyHandler)
       this.escKeyHandler = null
     }
+  }
+
+  // --- Add a control popover (mirrors the Add a chart flow) ---
+
+  private toggleAddControlPopover(anchor: HTMLElement): void {
+    if (this.addControlOpen) { this.closeAddControlPopover(); return }
+    this.openAddControlPopover(anchor)
+  }
+
+  private openAddControlPopover(anchor: HTMLElement): void {
+    this.addControlOpen = true
+    anchor.classList.add('is-active')
+
+    const popover = document.createElement('div')
+    popover.className = 'dashjs-popover dashjs-popover--add-control'
+    popover.setAttribute('data-popover', 'add-control')
+    popover.innerHTML = `
+      <div class="dashjs-popover__title">Add a control</div>
+      <div class="dashjs-typegrid">
+        ${CONTROL_TYPE_OPTIONS.map((tile) => `
+          <button class="dashjs-typetile" data-add-control-type="${tile.type}" title="${tile.label}">
+            <span class="dashjs-typetile__icon">${icon(tile.iconKey as any, { size: 18 })}</span>
+            <span class="dashjs-typetile__label">${tile.label}</span>
+          </button>
+        `).join('')}
+      </div>
+    `
+
+    const rect = anchor.getBoundingClientRect()
+    popover.style.position = 'fixed'
+    popover.style.top = `${rect.bottom + 4}px`
+    popover.style.left = `${rect.left}px`
+    popover.style.zIndex = '1000'
+    this.mountPopover(popover)
+
+    popover.querySelectorAll<HTMLButtonElement>('[data-add-control-type]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const type = btn.dataset.addControlType as ControlType
+        this.addControl(type)
+        this.closeAddControlPopover()
+      })
+    })
+
+    this.outsideClickHandler = (e: MouseEvent) => {
+      if (popover.contains(e.target as Node) || anchor.contains(e.target as Node)) return
+      this.closeAddControlPopover()
+    }
+    this.escKeyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') this.closeAddControlPopover()
+    }
+    setTimeout(() => {
+      document.addEventListener('click', this.outsideClickHandler!)
+      document.addEventListener('keydown', this.escKeyHandler!)
+    }, 0)
+  }
+
+  private closeAddControlPopover(): void {
+    if (!this.addControlOpen) return
+    this.addControlOpen = false
+    const anchor = this.root.querySelector<HTMLButtonElement>('[data-tb="add-control"]')
+    anchor?.classList.remove('is-active')
+    document.querySelector('[data-popover="add-control"]')?.remove()
+    if (this.outsideClickHandler) {
+      document.removeEventListener('click', this.outsideClickHandler)
+      this.outsideClickHandler = null
+    }
+    if (this.escKeyHandler) {
+      document.removeEventListener('keydown', this.escKeyHandler)
+      this.escKeyHandler = null
+    }
+  }
+
+  private addControl(type: ControlType): void {
+    const page = this.activePage()
+    const controls = (page.controls ??= [])
+    const allIds = [
+      ...(this.dashboard.pages.flatMap((p) => p.controls ?? []).map((c) => c.dashboard_control_id)),
+      0,
+    ]
+    const nextId = Math.max(...allIds) + 1
+    const chartBottoms = (page.charts ?? []).map((c) => (c.dashboard_chart_y ?? 0) + (c.dashboard_chart_h ?? 0))
+    const controlBottoms = controls.map((c) => (c.dashboard_control_y ?? 0) + (c.dashboard_control_h ?? 0))
+    const nextY = Math.max(0, ...chartBottoms, ...controlBottoms)
+    const control = createDefaultControl(type, nextId, {
+      pageId: page.dashboard_page_id,
+      x: 0,
+      y: nextY,
+    })
+    controls.push(control)
+    this.markDirty()
+    this.remountActivePage()
+    this.selectControl(control.dashboard_control_id)
+  }
+
+  private deleteControl(id: number): void {
+    const page = this.activePage()
+    if (!page.controls) return
+    page.controls = page.controls.filter((c) => c.dashboard_control_id !== id)
+    // Drop any filter row emitted by this control so the rest of the
+    // dashboard isn't left filtering on a gone-away widget.
+    this.dashboard.filters = (this.dashboard.filters ?? []).filter((f) => f.controlId !== id)
+    this.selectedControlId = null
+    this.markDirty()
+    this.refreshFilterBar()
+    this.remountActivePage()
+    this.refreshPanels()
+    this.rerenderAllCharts()
+  }
+
+  /** Wire Properties-panel events when a control is selected: title input,
+   *  field chip (open picker / clear), and Delete control. */
+  private attachControlPropertyEvents(host: HTMLElement): void {
+    const titleInput = host.querySelector<HTMLInputElement>('[data-prop="control-title"]')
+    titleInput?.addEventListener('input', (e) => {
+      const control = this.selectedControl()
+      if (!control) return
+      control.dashboard_control_title = (e.target as HTMLInputElement).value
+      this.markDirty()
+      // Update the on-canvas card title live without a full re-render.
+      const cardTitle = this.root.querySelector<HTMLElement>(
+        `[data-control-id="${control.dashboard_control_id}"] .dashjs-card__title`,
+      )
+      if (cardTitle) cardTitle.textContent = control.dashboard_control_title ?? ''
+    })
+
+    host.querySelectorAll<HTMLElement>('[data-control-field-chip] [data-chip-action]').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const action = el.dataset.chipAction
+        const control = this.selectedControl()
+        if (!control) return
+        if (action === 'open-field') this.openControlFieldPicker(el, control)
+        else if (action === 'remove') this.clearControlField(control)
+      })
+    })
+    // Empty chip — clicking anywhere on it opens the picker.
+    const emptyChip = host.querySelector<HTMLElement>('[data-control-field-chip].dashjs-chip--empty')
+    if (emptyChip) {
+      emptyChip.addEventListener('click', (e) => {
+        if ((e.target as HTMLElement).closest('[data-chip-action]')) return
+        const control = this.selectedControl()
+        if (control) this.openControlFieldPicker(emptyChip, control)
+      })
+    }
+
+    host.querySelector<HTMLButtonElement>('[data-action="delete-control"]')?.addEventListener('click', () => {
+      const control = this.selectedControl()
+      if (!control) return
+      this.deleteControl(control.dashboard_control_id)
+    })
+  }
+
+  private clearControlField(control: DashboardControlRecord): void {
+    const cfg = (control.dashboard_control_config ??= {})
+    delete cfg.field
+    cfg.selectedValues = []
+    this.dashboard.filters = (this.dashboard.filters ?? []).filter((f) => f.controlId !== control.dashboard_control_id)
+    this.markDirty()
+    this.refreshFilterBar()
+    this.refreshPanels()
+    this.rerenderControl(control.dashboard_control_id)
+    this.rerenderAllCharts()
+  }
+
+  /** Field picker for a control. Same popover as the chart slot picker
+   *  but binds via control.dashboard_control_config.field. */
+  private openControlFieldPicker(anchor: HTMLElement, control: DashboardControlRecord): void {
+    this.closeSlotPopovers()
+
+    const popover = document.createElement('div')
+    popover.className = 'dashjs-popover dashjs-popover--fieldpicker'
+    popover.setAttribute('data-popover', 'fieldpicker')
+
+    const renderList = (query: string) => {
+      const q = query.trim().toLowerCase()
+      // Daterange controls hint at date fields up top.
+      const wantDate = control.dashboard_control_type === 'daterange'
+      const sorted = wantDate
+        ? [...this.fields].sort((a, b) => (a.type === 'date' ? -1 : 0) - (b.type === 'date' ? -1 : 0))
+        : this.fields
+      const filtered = q ? sorted.filter((f) => f.name.toLowerCase().includes(q)) : sorted
+      return filtered.map((f) => {
+        const badge = fieldTypeBadge(f.type)
+        return `
+          <li class="dashjs-fieldpicker__item" data-pick-field="${f.id}">
+            <span class="dashjs-chip__badge" style="background:${badge.color}">${badge.label}</span>
+            <span>${escape(f.name)}</span>
+          </li>
+        `
+      }).join('') || `<li class="dashjs-fieldpicker__empty">No matching fields</li>`
+    }
+
+    popover.innerHTML = `
+      <input class="dashjs-form__input" data-fieldpicker-search type="search" placeholder="Search fields" />
+      <ul class="dashjs-fieldpicker__list" data-fieldpicker-list>${renderList('')}</ul>
+    `
+
+    const rect = anchor.getBoundingClientRect()
+    popover.style.position = 'fixed'
+    popover.style.top = `${rect.bottom + 4}px`
+    popover.style.left = `${rect.left}px`
+    popover.style.zIndex = '1001'
+    popover.style.minWidth = `${Math.max(rect.width, 240)}px`
+    this.mountPopover(popover)
+
+    const search = popover.querySelector<HTMLInputElement>('[data-fieldpicker-search]')!
+    const list = popover.querySelector<HTMLElement>('[data-fieldpicker-list]')!
+    setTimeout(() => search.focus(), 30)
+
+    const bindItemClicks = () => {
+      list.querySelectorAll<HTMLElement>('[data-pick-field]').forEach((li) => {
+        li.addEventListener('click', () => {
+          const fid = li.dataset.pickField
+          if (!fid) return
+          this.applyFieldToControl(control.dashboard_control_id, fid)
+          this.closeSlotPopovers()
+        })
+      })
+    }
+    bindItemClicks()
+    search.addEventListener('input', () => {
+      list.innerHTML = renderList(search.value)
+      bindItemClicks()
+    })
+
+    this.outsideClickHandler = (e: MouseEvent) => {
+      if (popover.contains(e.target as Node) || anchor.contains(e.target as Node)) return
+      this.closeSlotPopovers()
+    }
+    this.escKeyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') this.closeSlotPopovers()
+    }
+    setTimeout(() => {
+      document.addEventListener('click', this.outsideClickHandler!)
+      document.addEventListener('keydown', this.escKeyHandler!)
+    }, 0)
   }
 
   // --- chip events + slot popovers ---
