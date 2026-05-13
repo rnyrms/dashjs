@@ -127,6 +127,9 @@ export class DashboardEditor {
    *  chart or control. Held here so destroy() can detach it. */
   private keyboardHandler: ((e: KeyboardEvent) => void) | null = null
   private activePropTab: PropTab = 'setup'
+  /** Chart-type grid in Setup tab: collapsed shows first 2 rows (6 tiles),
+   *  expanded shows the rest. User toggles via Show more / Show less. */
+  private typeGridExpanded = false
   /** Field catalogue — sourced from ctx.dataSource.listFields() when present,
    *  else MOCK_FIELDS. Updated asynchronously after construction. */
   private fields: DataField[] = []
@@ -650,6 +653,9 @@ export class DashboardEditor {
   private renderSetupTab(chart: DashboardChartRecord, t: (k: string, f: string) => string): string {
     const cfg = chart.dashboard_chart_config ?? {}
 
+    const expanded = this.typeGridExpanded
+    const hiddenCount = Math.max(0, CHART_TYPE_OPTIONS.length - 6)
+
     const typeOptions = CHART_TYPE_OPTIONS.map((o) => `
       <button
         class="dashjs-typetile ${o.type === chart.dashboard_chart_type ? 'is-active' : ''}"
@@ -661,6 +667,13 @@ export class DashboardEditor {
         <span class="dashjs-typetile__label">${o.label}</span>
       </button>
     `).join('')
+
+    const toggleBtn = hiddenCount > 0 ? `
+      <button class="dashjs-typegrid__toggle" data-prop="type-toggle">
+        ${expanded ? icon('chevron-down', { size: 12 }) : icon('chevron-right', { size: 12 })}
+        <span>${expanded ? 'Show less' : `Show ${hiddenCount} more`}</span>
+      </button>
+    ` : ''
 
     const schema = CHART_TYPE_SCHEMAS[chart.dashboard_chart_type]
     const slotSections = schema.slots.map((slot) => this.renderSlotChip(slot, cfg)).join('')
@@ -678,7 +691,8 @@ export class DashboardEditor {
 
       <div class="dashjs-props__section">
         <label class="dashjs-props__label">${t('editor.chartType', 'Chart type')}</label>
-        <div class="dashjs-typegrid">${typeOptions}</div>
+        <div class="dashjs-typegrid ${expanded ? '' : 'is-collapsed'}">${typeOptions}</div>
+        ${toggleBtn}
       </div>
 
       ${slotSections}
@@ -1312,6 +1326,11 @@ export class DashboardEditor {
         this.refreshPanels() // updates type tile active state
         this.rerenderChart(chart.dashboard_chart_id)
       })
+    })
+
+    host.querySelector<HTMLButtonElement>('[data-prop="type-toggle"]')?.addEventListener('click', () => {
+      this.typeGridExpanded = !this.typeGridExpanded
+      this.refreshPanels()
     })
 
     this.attachChipEvents(host)
