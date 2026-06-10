@@ -3,7 +3,7 @@
 // Usage (vanilla):
 //   import dashjs from 'dashjs'
 //   import 'dashjs/styles'
-//   const instance = dashjs(document.getElementById('app'), { mode: 'list' })
+//   const instance = dashjs(document.getElementById('app'), { dashboard, dataSource, onSave })
 //
 // The factory returns an instance you can drive imperatively. No framework
 // dependency on the consumer side — works from React, Vue, Svelte, or plain
@@ -21,7 +21,6 @@ jspreadsheet.setLicense('evaluation')
 export type {
   DashJsOptions,
   DashJsInstance,
-  DashJsMode,
   DashJsDataSource,
   DataField,
   FieldType,

@@ -1,6 +1,6 @@
 import dashjs from '../src/index'
 import type { DashJsDataSource } from '../src/index'
-import { MOCK_DASHBOARD, MOCK_FIELDS } from '../src/core/mockData'
+import { MOCK_DASHBOARD, MOCK_FIELDS } from './mockData'
 
 const root = document.getElementById('app')!
 
@@ -34,7 +34,6 @@ const demoDataSource: DashJsDataSource = {
 }
 
 const instance = dashjs(root, {
-  mode: 'editor',
   dashboard: MOCK_DASHBOARD,
   dataSource: demoDataSource,
   onSave: async (dashboard) => {
@@ -43,23 +42,6 @@ const instance = dashjs(root, {
     console.log('[demo] onSave', dashboard)
     ;(window as any).lastSavedDashboard = dashboard
   },
-})
-
-// Light/dark toggle in the demo header.
-const themeBtn = document.getElementById('theme-toggle')!
-let theme: 'light' | 'dark' = 'light'
-themeBtn.addEventListener('click', () => {
-  theme = theme === 'light' ? 'dark' : 'light'
-  root.setAttribute('data-dashjs-theme', theme)
-})
-
-// Mode toggle for editor ↔ viewer comparison.
-const modeBtn = document.getElementById('mode-toggle')
-let mode: 'editor' | 'viewer' = 'editor'
-modeBtn?.addEventListener('click', () => {
-  mode = mode === 'editor' ? 'viewer' : 'editor'
-  instance.setMode(mode)
-  modeBtn.textContent = mode === 'editor' ? 'Switch to view mode' : 'Switch to edit mode'
 })
 
 ;(window as any).dashjs = { instance, dashjs }

@@ -145,8 +145,8 @@ export interface DashboardChartRecord {
   dashboard_chart_y?: number
   dashboard_chart_w?: number
   dashboard_chart_h?: number
-  /** Pre-computed series data. In production this comes from getChartData;
-   *  for the mock dashboard we embed it directly. */
+  /** Pre-computed series data. Usually resolved via DashJsDataSource.getChartData;
+   *  may also be embedded directly in the dashboard payload. */
   series?: ChartDataSeries[]
   /** Single value for KPI charts. */
   kpi_value?: number

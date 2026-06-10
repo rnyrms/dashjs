@@ -5,7 +5,7 @@
 
 import { GridStack, type GridItemHTMLElement, type GridStackNode } from 'gridstack'
 import type { DashboardFull, DashboardChartRecord, DashboardControlRecord, ControlType, ChartType, AggregationMode, DashboardPageRecord, DashboardFilter, FilterOperator, ChartConfig } from '../domain'
-import type { DashJsDataSource, DataField } from '../types'
+import type { DashJsDataSource, DataField, FieldType } from '../types'
 import { renderChart, type ChartHandle } from '../charts/renderChart'
 import { createDefaultChart } from '../charts/defaults'
 import { applyFilters } from '../charts/applyFilters'
@@ -14,7 +14,6 @@ import { parseCsv, type CsvParseResult } from '../charts/csv'
 import { CHART_TYPE_SCHEMAS, readSlot, type SlotSpec } from '../charts/slots'
 import { renderControl, createDefaultControl, controlToFilter, type ControlHandle } from '../charts/controls'
 import { icon } from '../icons'
-import { MOCK_FIELDS, fieldTypeBadge } from '../mockData'
 import { openNativeModal } from '../widgets/modal'
 import { parseJspreadsheetJson } from '../data/parseJson'
 import { parseTabularFile, TABULAR_EXTENSIONS } from '../data/tabularImport'
@@ -22,6 +21,19 @@ import { parseTabularFile, TABULAR_EXTENSIONS } from '../data/tabularImport'
 const GRID_COLUMNS = 12
 /** Pixel height of one grid row. Determines chart heights together with `h`. */
 const GRID_ROW_HEIGHT = 60
+
+/** Short type badge label shown in the data field list (Looker-style ABC / 123). */
+function fieldTypeBadge(type: FieldType): { label: string; color: string } {
+  switch (type) {
+    case 'text':    return { label: 'ABC', color: '#0d9d58' }
+    case 'numeric': return { label: '123', color: '#1a73e8' }
+    case 'single':  return { label: '○',   color: '#a142f4' }
+    case 'multi':   return { label: '☐',   color: '#a142f4' }
+    case 'scale':   return { label: '↕',   color: '#f4b400' }
+    case 'date':    return { label: '📅',  color: '#ea4335' }
+    case 'geo':     return { label: '◎',   color: '#34a853' }
+  }
+}
 
 export interface DashboardEditorContext {
   dashboard: DashboardFull
@@ -134,7 +146,7 @@ export class DashboardEditor {
    *  expanded shows the rest. User toggles via Show more / Show less. */
   private typeGridExpanded = false
   /** Field catalogue — sourced from ctx.dataSource.listFields() when present,
-   *  else MOCK_FIELDS. Updated asynchronously after construction. */
+   *  or from an imported data file. Updated asynchronously after construction. */
   private fields: DataField[] = []
   /** Per-chart fetch tokens so stale getChartData responses can't overwrite
    *  a newer render after the user changes the chart's config quickly. */
@@ -161,10 +173,8 @@ export class DashboardEditor {
       })
     }
     this.activePageId = this.dashboard.pages[0].dashboard_page_id
-    // Seed fields synchronously with the mock so the first render has
-    // something to show; if a dataSource is provided, refresh once the
-    // host promise resolves and re-render the affected surfaces.
-    this.fields = MOCK_FIELDS
+    // The field catalogue starts empty; when a dataSource is provided it is
+    // loaded asynchronously after render() and the affected surfaces re-render.
   }
 
   render(): void {
@@ -231,7 +241,7 @@ export class DashboardEditor {
   /** Pull the field catalogue from the data source (when present). On
    *  success, re-render any panel that lists or selects fields so the new
    *  catalogue takes effect. Errors fall back to whatever fields are
-   *  already loaded — typically MOCK_FIELDS from construction. */
+   *  already loaded. */
   private async loadFields(): Promise<void> {
     if (!this.ctx.dataSource) return
     try {
@@ -428,6 +438,7 @@ export class DashboardEditor {
         class="grid-stack-item dashjs-card dashjs-card--chart ${selected}"
         data-chart-id="${c.dashboard_chart_id}"
         gs-x="${x}" gs-y="${y}" gs-w="${w}" gs-h="${h}"
+        gs-min-w="2" gs-min-h="2"
       >
         <div class="grid-stack-item-content dashjs-card__inner">
           <div class="dashjs-card__title">${escape(c.dashboard_chart_title ?? 'Untitled')}</div>
@@ -448,6 +459,7 @@ export class DashboardEditor {
         class="grid-stack-item dashjs-card dashjs-card--chart dashjs-card--control ${selected}"
         data-control-id="${c.dashboard_control_id}"
         gs-x="${x}" gs-y="${y}" gs-w="${w}" gs-h="${h}"
+        gs-min-w="2" gs-min-h="1"
       >
         <div class="grid-stack-item-content dashjs-card__inner">
           <div class="dashjs-card__title">${escape(c.dashboard_control_title ?? 'Control')}</div>
@@ -482,7 +494,7 @@ export class DashboardEditor {
     const fields = this.filteredFields()
     const sourceLabel = this.csvData
       ? `${escape(this.csvData.fileName)} · ${this.csvData.rows.length} rows`
-      : escape(this.dashboard.survey_name ?? 'Mock data')
+      : escape(this.dashboard.survey_name ?? 'Data')
     return `
       <div class="dashjs-panel">
         <div class="dashjs-panel__header">
@@ -1425,9 +1437,11 @@ export class DashboardEditor {
 
   private clearImportedData(): void {
     this.csvData = null
-    this.fields = MOCK_FIELDS
+    this.fields = []
     this.refreshPanels()
     this.rerenderAllCharts()
+    // Restore the host catalogue (when a dataSource is present).
+    void this.loadFields()
   }
 
   private attachFieldSearch(): void {
@@ -1697,7 +1711,7 @@ export class DashboardEditor {
   }
 
   /** Mount/remount a single chart. Synchronous when there's no data source
-   *  (the existing mock path). When a data source is provided, shows a
+   *  (embedded-series path). When a data source is provided, shows a
    *  loading placeholder, fetches data, and applies it on resolve — guarded
    *  by a per-chart fetch token so a stale earlier response can't overwrite
    *  a newer one. */
@@ -1729,7 +1743,7 @@ export class DashboardEditor {
     }
 
     if (!this.ctx.dataSource) {
-      // Mock path — synchronous filter against embedded series.
+      // Embedded-series path — synchronous filter against chart.series.
       const view = applyFilters(chart, this.dashboard.filters ?? [])
       this.chartHandles.set(id, renderChart(body, view))
       return
@@ -1949,8 +1963,8 @@ export class DashboardEditor {
   }
 
   /** Distinct values for a field, sourced from uploaded CSV rows. When
-   *  no CSV is loaded the list is empty — controls in mock-only mode show
-   *  a "no values available" placeholder. */
+   *  no CSV is loaded the list is empty — controls then show a
+   *  "no values available" placeholder. */
   private getFieldDistinctValues(fieldId: string | undefined): string[] {
     if (!fieldId || !this.csvData) return []
     const set = new Set<string>()
@@ -1978,6 +1992,7 @@ export class DashboardEditor {
         margin: 0,
         float: false,
         animate: true,
+        resizable: { handles: 'e,s,se' },
         // Grid items (DOM children with .grid-stack-item) self-register from
         // their gs-x/gs-y/gs-w/gs-h attributes.
       },

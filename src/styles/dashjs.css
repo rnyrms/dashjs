@@ -40,31 +40,6 @@
   box-sizing: border-box;
 }
 
-/* List page */
-.dashjs-list {
-  padding: 24px;
-  min-height: 100%;
-}
-
-.dashjs-list__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.dashjs-list__title {
-  font-size: 22px;
-  font-weight: 600;
-  margin: 0;
-}
-
-.dashjs-list__subtitle {
-  color: var(--dashjs-text-muted);
-  font-size: 13px;
-  margin-top: 2px;
-}
-
 /* Buttons */
 .dashjs-btn {
   display: inline-flex;
@@ -137,20 +112,6 @@
   gap: 8px;
   justify-content: flex-end;
   margin-top: 8px;
-}
-
-/* Empty state */
-.dashjs-empty {
-  text-align: center;
-  padding: 48px 24px;
-  color: var(--dashjs-text-muted);
-}
-
-/* Jspreadsheet container — the table renders inside this. */
-.dashjs-table {
-  border: 1px solid var(--dashjs-border);
-  border-radius: var(--dashjs-radius);
-  overflow: hidden;
 }
 
 /* ====================================================================
@@ -1191,43 +1152,7 @@
   border: 0;
 }
 
-/* ====================================================================
-   VIEWER PAGE  (read-only)
-==================================================================== */
-/* Viewer page */
-.dashjs-viewer {
-  padding: 24px;
-}
-.dashjs-viewer__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-.dashjs-viewer__title {
-  font-size: 22px;
-  font-weight: 600;
-  margin: 0;
-}
-.dashjs-viewer__subtitle {
-  color: var(--dashjs-text-muted);
-  font-size: 13px;
-  margin-top: 2px;
-}
-.dashjs-viewer__actions {
-  display: flex;
-  gap: 4px;
-}
-.dashjs-viewer__grid {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: 1fr 1fr;
-}
-@media (max-width: 900px) {
-  .dashjs-viewer__grid { grid-template-columns: 1fr; }
-}
-
-/* Card — generic container for a chart or table inside the viewer */
+/* Card — generic container for a chart or table on the canvas */
 .dashjs-card {
   border: 1px solid var(--dashjs-border);
   border-radius: var(--dashjs-radius);
@@ -1248,29 +1173,6 @@
 .dashjs-card__body {
   padding: 12px;
   min-height: 320px;
-}
-
-/* Inline create form below the table */
-.dashjs-create {
-  margin-top: 20px;
-  padding: 16px;
-  border: 1px solid var(--dashjs-border);
-  border-radius: var(--dashjs-radius);
-  background: var(--dashjs-bg-subtle);
-}
-.dashjs-create__title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--dashjs-text);
-  margin-bottom: 10px;
-}
-.dashjs-create__row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.dashjs-create__input {
-  flex: 1;
 }
 
 /* ====================================================================

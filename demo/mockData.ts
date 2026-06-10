@@ -1,14 +1,8 @@
-// Mock data for the editor UI. Used when no DashJsDataSource is supplied
-// to dashjs(). When a host wires up a real data source (Phase F), the
-// editor calls dataSource.listFields() and dataSource.getChartData()
-// instead of using these constants.
+// Demo-only mock data. The library itself ships no sample data — the host
+// supplies a dashboard + DashJsDataSource. These constants stand in for a
+// real backend so the demo works standalone.
 
-import type { DashboardFull } from './domain'
-import type { DataField, FieldType } from './types'
-
-// Re-export so existing imports of DataField/FieldType from mockData
-// keep compiling — the canonical location is now ./types.
-export type { DataField, FieldType }
+import type { DashboardFull, DataField } from '../src/index'
 
 export const MOCK_FIELDS: DataField[] = [
   { id: 'q1', name: 'Achievement ID', type: 'text' },
@@ -33,22 +27,8 @@ export const MOCK_FIELDS: DataField[] = [
   { id: 'q20', name: 'Country', type: 'geo' },
 ]
 
-/** Short type badge label shown in the data field list (Looker-style ABC / 123). */
-export function fieldTypeBadge(type: FieldType): { label: string; color: string } {
-  switch (type) {
-    case 'text':    return { label: 'ABC', color: '#0d9d58' }
-    case 'numeric': return { label: '123', color: '#1a73e8' }
-    case 'single':  return { label: '○',   color: '#a142f4' }
-    case 'multi':   return { label: '☐',   color: '#a142f4' }
-    case 'scale':   return { label: '↕',   color: '#f4b400' }
-    case 'date':    return { label: '📅',  color: '#ea4335' }
-    case 'geo':     return { label: '◎',   color: '#34a853' }
-  }
-}
-
-/** A complete demo dashboard with one page and four charts of different types,
- *  each with pre-computed series. Used by the demo and as the default when no
- *  dashboard is supplied to the editor. */
+/** A complete demo dashboard with one page and several charts of different
+ *  types, each with pre-computed series. */
 export const MOCK_DASHBOARD: DashboardFull = {
   dashboard_id: 1,
   dashboard_name: 'Q1 Customer Satisfaction',

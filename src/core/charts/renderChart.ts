@@ -437,7 +437,7 @@ function renderVariablePie(el: HTMLElement, chart: DashboardChartRecord): ChartH
 
   // Use two metrics from each datapoint: `value` drives slice angle, and a
   // synthesised `z` (here equal to value) drives slice radius. With single-
-  // metric mock data both end up equal so the chart still reads as a pie.
+  // metric data both end up equal so the chart still reads as a pie.
   const hc = Highcharts.chart(el, {
     ...commonOptions(chart),
     chart: { type: 'variablepie', backgroundColor: 'transparent' },
@@ -461,7 +461,7 @@ function renderScatter(el: HTMLElement, chart: DashboardChartRecord, opts: { bub
 
   // ChartDataPoint has {label, value}. For scatter/bubble we need (x, y[, z]).
   // Derive x from the index so the chart renders something sensible from the
-  // existing mock shape; real data integration (Phase F) will supply x/y.
+  // 1D series shape until native x/y series support lands.
   const data = (series?.data ?? []).map((d, i) => opts.bubble
     ? [i, d.value, d.value]
     : [i, d.value]
@@ -509,7 +509,7 @@ function renderHeatmap(el: HTMLElement, chart: DashboardChartRecord): ChartHandl
   const palette = paletteFor(chart.dashboard_chart_config)
 
   // Synthesise a 5×days grid from the existing 1D data so the heatmap looks
-  // realistic against mock data. Phase F supplies real 2D data.
+  // realistic until native 2D series support lands.
   const cols = Math.min(7, series?.data.length ?? 0) || 5
   const rows = 5
   const data: [number, number, number][] = []
@@ -605,7 +605,7 @@ function renderSankey(el: HTMLElement, chart: DashboardChartRecord): ChartHandle
   const palette = paletteFor(chart.dashboard_chart_config)
 
   // Synthesise links: each category contributes to a single "Total" sink so
-  // the diagram is visually meaningful against single-series mock data.
+  // the diagram is visually meaningful against single-series data.
   const data = (series?.data ?? []).map((d) => [d.label, 'Total', d.value])
 
   const hc = Highcharts.chart(el, {

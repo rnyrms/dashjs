@@ -1,10 +1,10 @@
-// Apply filters to a chart's series for rendering. Mock-data version.
+// Apply filters to a chart's embedded series for rendering.
 //
-// In a real backend-backed product the filters would be sent with the query
-// and the server returns aggregated series. Here, with pre-computed mock
-// series, we approximate by filtering the series' data points whose `label`
-// matches the filter's value list — but only when the filter's fieldId
-// matches the chart's dimension questionCode. This is enough to demo the UX.
+// Used when no DashJsDataSource is wired up — with a data source, filters
+// travel with the query and the host returns aggregated series. Here, with
+// pre-computed series embedded in the chart, we approximate by filtering the
+// series' data points whose `label` matches the filter's value list — but
+// only when the filter's fieldId matches the chart's dimension questionCode.
 
 import type { DashboardChartRecord, DashboardFilter } from '../domain'
 
