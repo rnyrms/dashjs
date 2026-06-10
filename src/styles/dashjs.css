@@ -1183,3 +1183,227 @@
 .dashjs-create__input {
   flex: 1;
 }
+
+/* ====================================================================
+   NATIVE MODAL (no jSuites dependency)
+==================================================================== */
+.dashjs-native-modal-overlay[data-dashjs] {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.dashjs-native-modal-overlay[data-dashjs].is-visible {
+  opacity: 1;
+}
+.dashjs-native-modal-overlay[data-dashjs] .dashjs-native-modal {
+  background: var(--dashjs-bg);
+  border: 1px solid var(--dashjs-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  width: 520px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: translateY(-8px);
+  transition: transform 150ms ease;
+}
+.dashjs-native-modal-overlay[data-dashjs].is-visible .dashjs-native-modal {
+  transform: translateY(0);
+}
+.dashjs-native-modal-overlay[data-dashjs] .dashjs-native-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--dashjs-border);
+  flex-shrink: 0;
+}
+.dashjs-native-modal-overlay[data-dashjs] .dashjs-native-modal__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dashjs-text);
+}
+.dashjs-native-modal-overlay[data-dashjs] .dashjs-native-modal__close {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--dashjs-text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.dashjs-native-modal-overlay[data-dashjs] .dashjs-native-modal__close:hover {
+  background: var(--dashjs-bg-hover);
+  color: var(--dashjs-text);
+}
+.dashjs-native-modal-overlay[data-dashjs] .dashjs-native-modal__content {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ====================================================================
+   DATA IMPORT MODAL
+==================================================================== */
+.dashjs-import {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  font-size: 13px;
+  color: var(--dashjs-text);
+}
+
+.dashjs-import__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 12px 16px 0;
+  border-bottom: 1px solid var(--dashjs-border);
+}
+
+.dashjs-import__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  background: transparent;
+  color: var(--dashjs-text-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: -1px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.dashjs-import__tab:hover {
+  background: var(--dashjs-bg-hover);
+  color: var(--dashjs-text);
+}
+.dashjs-import__tab.is-active {
+  background: var(--dashjs-bg);
+  border-color: var(--dashjs-border);
+  color: var(--dashjs-text);
+  font-weight: 500;
+}
+
+.dashjs-import__panel {
+  padding: 16px;
+}
+.dashjs-import__panel--hidden {
+  display: none;
+}
+
+/* Drop zone */
+.dashjs-import__dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 28px 16px;
+  border: 2px dashed var(--dashjs-border);
+  border-radius: var(--dashjs-radius);
+  background: var(--dashjs-bg-subtle);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 120ms ease, background 120ms ease;
+  color: var(--dashjs-text-muted);
+}
+.dashjs-import__dropzone:hover,
+.dashjs-import__dropzone.is-drag-over {
+  border-color: var(--dashjs-accent);
+  background: rgba(35, 131, 226, 0.05);
+  color: var(--dashjs-text);
+}
+/* File input lives outside the modal; nothing to hide here */
+.dashjs-import__dropzone-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dashjs-text);
+}
+.dashjs-import__dropzone-hint {
+  font-size: 11px;
+  color: var(--dashjs-text-muted);
+}
+
+/* JSON paste panel */
+.dashjs-import__jsonhint {
+  margin: 0 0 10px;
+  color: var(--dashjs-text-muted);
+  line-height: 1.5;
+}
+.dashjs-import__jsonhint code {
+  padding: 1px 4px;
+  background: var(--dashjs-bg-hover);
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--dashjs-text);
+}
+.dashjs-import__textarea {
+  width: 100%;
+  height: 140px;
+  padding: 10px;
+  border: 1px solid var(--dashjs-border);
+  border-radius: var(--dashjs-radius);
+  background: var(--dashjs-bg-subtle);
+  color: var(--dashjs-text);
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 120ms ease;
+}
+.dashjs-import__textarea:focus {
+  border-color: var(--dashjs-accent);
+}
+
+/* Preview bar */
+.dashjs-import__preview {
+  padding: 8px 16px;
+  border-top: 1px solid var(--dashjs-border);
+}
+.dashjs-import__preview--hidden {
+  display: none;
+}
+.dashjs-import__preview-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--dashjs-accent);
+}
+.dashjs-import__preview-row--error {
+  color: var(--dashjs-danger);
+}
+
+/* Actions */
+.dashjs-import__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--dashjs-border);
+}
+.dashjs-import__actions .dashjs-btn--primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}

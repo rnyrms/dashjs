@@ -34,7 +34,7 @@ export function parseCsv(text: string): CsvParseResult {
 }
 
 /** Sniff a column's type from its sampled values. */
-function inferFieldType(values: string[]): FieldType {
+export function inferFieldType(values: string[]): FieldType {
   const nonEmpty = values.filter((v) => v && v.trim() !== '')
   if (nonEmpty.length === 0) return 'text'
   if (nonEmpty.every((v) => !isNaN(Number(v)) && v.trim() !== '')) return 'numeric'

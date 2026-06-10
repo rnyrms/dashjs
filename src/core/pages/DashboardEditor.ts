@@ -10,11 +10,14 @@ import { renderChart, type ChartHandle } from '../charts/renderChart'
 import { createDefaultChart } from '../charts/defaults'
 import { applyFilters } from '../charts/applyFilters'
 import { DEFAULT_PALETTE, paletteFor } from '../charts/palette'
-import { parseCsv } from '../charts/csv'
+import { parseCsv, type CsvParseResult } from '../charts/csv'
 import { CHART_TYPE_SCHEMAS, readSlot, type SlotSpec } from '../charts/slots'
 import { renderControl, createDefaultControl, controlToFilter, type ControlHandle } from '../charts/controls'
 import { icon } from '../icons'
 import { MOCK_FIELDS, fieldTypeBadge } from '../mockData'
+import { openNativeModal } from '../widgets/modal'
+import { parseJspreadsheetJson } from '../data/parseJson'
+import { parseTabularFile, TABULAR_EXTENSIONS } from '../data/tabularImport'
 
 const GRID_COLUMNS = 12
 /** Pixel height of one grid row. Determines chart heights together with `h`. */
@@ -953,10 +956,8 @@ export class DashboardEditor {
       this.save()
     })
 
-    // "Add data" → CSV file picker. For now CSV is the only supported source;
-    // future iterations could open a popover offering CSV / JSON / connect-API.
     this.root.querySelector<HTMLButtonElement>('[data-tb="add-data"]')?.addEventListener('click', () => {
-      this.openCsvUpload()
+      this.openDataImport()
     })
 
     this.attachFilterBarEvents()
@@ -1224,40 +1225,205 @@ export class DashboardEditor {
     })
   }
 
-  /** Open a one-shot native file picker for CSV upload. Triggered by the
-   *  toolbar "Add data" button — no persistent hidden input in the DOM. */
-  private openCsvUpload(): void {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.csv,text/csv'
-    input.addEventListener('change', () => {
-      const file = input.files?.[0]
-      if (file) void this.loadCsvFile(file)
+  /** Open the data import modal — supports file upload (all formats via
+   *  TabularJS) and direct JSON paste from Jspreadsheet.
+   *
+   *  All DOM element references and event listeners are wired up BEFORE the
+   *  jSuites modal is initialised, because jSuites.modal() restructures the
+   *  host element's DOM and queries against `modal.el` after init are unreliable. */
+  private openDataImport(): void {
+    let pending: CsvParseResult | null = null
+
+    // — Build DOM tree directly so we capture element refs before jSuites touches them —
+    const wrapper = document.createElement('div')
+    wrapper.className = 'dashjs-import'
+    wrapper.innerHTML = `
+      <div class="dashjs-import__tabs">
+        <button class="dashjs-import__tab is-active" data-import-tab="file">
+          ${icon('database', { size: 14 })} File
+        </button>
+        <button class="dashjs-import__tab" data-import-tab="json">
+          ${icon('code', { size: 14 })} Paste JSON
+        </button>
+      </div>
+      <div class="dashjs-import__panel" data-import-panel="file">
+        <div class="dashjs-import__dropzone" data-import-dropzone>
+          ${icon('database', { size: 32 })}
+          <span class="dashjs-import__dropzone-text">Drop a file here or click to select</span>
+          <span class="dashjs-import__dropzone-hint">CSV · JSON · XLSX · XLS · ODS · TSV and more</span>
+        </div>
+      </div>
+      <div class="dashjs-import__panel dashjs-import__panel--hidden" data-import-panel="json">
+        <p class="dashjs-import__jsonhint">
+          Paste the output of <code>worksheet.getJson()</code> (array of objects)
+          or <code>worksheet.getData()</code> (2-D array with headers in row 0).
+        </p>
+        <textarea
+          class="dashjs-import__textarea"
+          data-import-jsontext
+          placeholder='[{"Category":"A","Revenue":100}, ...]'
+          spellcheck="false"
+        ></textarea>
+      </div>
+      <div class="dashjs-import__preview dashjs-import__preview--hidden" data-import-preview></div>
+      <div class="dashjs-import__actions">
+        <button class="dashjs-btn" data-import-cancel>Cancel</button>
+        <button class="dashjs-btn dashjs-btn--primary" data-import-confirm disabled>Use this data</button>
+      </div>
+    `
+
+    // Hidden file input lives outside the modal so jSuites can't interfere with it.
+    const fileInput = document.createElement('input')
+    fileInput.type = 'file'
+    fileInput.accept = '.csv,.json,.xlsx,.xls,.ods,.tsv,.dif,.dbf,.slk,.xml'
+    fileInput.style.cssText = 'position:fixed;top:-999px;left:-999px;opacity:0;'
+    document.body.appendChild(fileInput)
+
+    // — Capture all element references before openModal() restructures the DOM —
+    const previewEl   = wrapper.querySelector<HTMLElement>('[data-import-preview]')!
+    const confirmBtn  = wrapper.querySelector<HTMLButtonElement>('[data-import-confirm]')!
+    const dropzone    = wrapper.querySelector<HTMLElement>('[data-import-dropzone]')!
+    const jsonTextarea = wrapper.querySelector<HTMLTextAreaElement>('[data-import-jsontext]')!
+    const tabs        = Array.from(wrapper.querySelectorAll<HTMLElement>('[data-import-tab]'))
+    const panels      = Array.from(wrapper.querySelectorAll<HTMLElement>('[data-import-panel]'))
+
+    // — Helpers —
+    const showPreview = (result: CsvParseResult, sourceName: string) => {
+      pending = result
+      previewEl.innerHTML = `
+        <div class="dashjs-import__preview-row">
+          <strong>${result.fields.length} fields</strong> &middot; ${result.rows.length.toLocaleString()} rows
+          &middot; <em>${escape(sourceName)}</em>
+        </div>
+      `
+      previewEl.classList.remove('dashjs-import__preview--hidden')
+      confirmBtn.disabled = false
+    }
+
+    const hidePreview = () => {
+      pending = null
+      previewEl.innerHTML = ''
+      previewEl.classList.add('dashjs-import__preview--hidden')
+      confirmBtn.disabled = true
+    }
+
+    const showError = (msg: string) => {
+      pending = null
+      previewEl.innerHTML = `<div class="dashjs-import__preview-row dashjs-import__preview-row--error">${msg}</div>`
+      previewEl.classList.remove('dashjs-import__preview--hidden')
+      confirmBtn.disabled = true
+    }
+
+    const showLoading = (fileName: string) => {
+      previewEl.innerHTML = `<div class="dashjs-import__preview-row">Parsing ${escape(fileName)}…</div>`
+      previewEl.classList.remove('dashjs-import__preview--hidden')
+      confirmBtn.disabled = true
+    }
+
+    // — Tab switching —
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const key = tab.dataset.importTab!
+        tabs.forEach((t) => t.classList.remove('is-active'))
+        tab.classList.add('is-active')
+        panels.forEach((p) => p.classList.add('dashjs-import__panel--hidden'))
+        panels.find((p) => p.dataset.importPanel === key)
+          ?.classList.remove('dashjs-import__panel--hidden')
+        hidePreview()
+      })
     })
-    input.click()
+
+    // — File processing —
+    const processFile = async (file: File) => {
+      showLoading(file.name)
+      const result = await this.parseAnyFile(file)
+      if (!result || result.fields.length === 0 || result.rows.length === 0) {
+        showError('Could not parse this file — check the console for details.')
+      } else {
+        showPreview(result, file.name)
+      }
+    }
+
+    // Dropzone: click opens the hidden input; drag/drop sends the file directly.
+    dropzone.addEventListener('click', () => fileInput.click())
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('is-drag-over') })
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('is-drag-over'))
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault()
+      dropzone.classList.remove('is-drag-over')
+      const file = (e as DragEvent).dataTransfer?.files[0]
+      if (file) void processFile(file)
+    })
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files?.[0]
+      if (file) void processFile(file)
+    })
+
+    // — JSON paste panel —
+    let debounce: ReturnType<typeof setTimeout>
+    jsonTextarea.addEventListener('input', () => {
+      clearTimeout(debounce)
+      debounce = setTimeout(() => {
+        const text = jsonTextarea.value.trim()
+        if (!text) { hidePreview(); return }
+        const result = parseJspreadsheetJson(text)
+        if (result.fields.length === 0 || result.rows.length === 0) {
+          showError('Invalid JSON — expected an array of objects or a 2-D array.')
+        } else {
+          showPreview(result, 'pasted JSON')
+        }
+      }, 350)
+    })
+
+    // — Actions —
+    wrapper.querySelector('[data-import-cancel]')?.addEventListener('click', () => modal.close())
+    confirmBtn.addEventListener('click', () => {
+      if (!pending) return
+      this.applyImportedData(pending)
+      modal.close()
+    })
+
+    // Open modal AFTER all events are bound. Clean up the stray file input on close.
+    const modal = openNativeModal({
+      title: 'Import Data',
+      body: wrapper,
+      width: 520,
+      onClose: () => fileInput.remove(),
+    })
   }
 
-  /** Read + parse an uploaded CSV file, then take it as the new data source:
-   *  field catalogue from the header row, chart series computed from the
-   *  rows on every render. Surface a friendly error on parse failure. */
-  private async loadCsvFile(file: File): Promise<void> {
+  /** Detect file format by extension and dispatch to the right parser. */
+  private async parseAnyFile(file: File): Promise<CsvParseResult | null> {
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+    console.info(`[dashjs] Parsing "${file.name}" (ext: ${ext || 'unknown'})`)
     try {
-      const text = await file.text()
-      const { fields, rows } = parseCsv(text)
-      if (fields.length === 0 || rows.length === 0) {
-        console.warn('[dashjs] CSV is empty or malformed')
-        return
+      if (ext === 'csv') {
+        return parseCsv(await file.text())
       }
-      this.csvData = { rows, fileName: file.name }
-      this.fields = fields
-      this.refreshPanels()
-      this.rerenderAllCharts()
+      if (ext === 'json') {
+        return parseJspreadsheetJson(await file.text())
+      }
+      // xlsx, xls, ods, tsv, dif, dbf, slk, xml and anything else → TabularJS
+      const result = await parseTabularFile(file)
+      console.info(`[dashjs] TabularJS result:`, result.fields.length, 'fields,', result.rows.length, 'rows')
+      return result
     } catch (err) {
-      console.error('[dashjs] CSV upload failed', err)
+      console.error('[dashjs] Import failed for', file.name, err)
+      return null
     }
   }
 
-  private clearCsv(): void {
+  /** Apply a parsed dataset as the active data source. Replaces whatever
+   *  was loaded before (CSV, JSON, or TabularJS result). */
+  private applyImportedData(result: CsvParseResult, fileName?: string): void {
+    if (result.fields.length === 0 || result.rows.length === 0) return
+    this.csvData = { rows: result.rows, fileName: fileName ?? 'imported data' }
+    this.fields = result.fields
+    this.refreshPanels()
+    this.rerenderAllCharts()
+  }
+
+  private clearImportedData(): void {
     this.csvData = null
     this.fields = MOCK_FIELDS
     this.refreshPanels()
