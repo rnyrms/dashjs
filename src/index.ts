@@ -9,6 +9,7 @@
 // dependency on the consumer side — works from React, Vue, Svelte, or plain
 // HTML the same way.
 
+import './styles/dashjs.css'
 import jspreadsheet from 'jspreadsheet'
 import { Dashboard } from './core/Dashboard'
 import type { DashJsOptions, DashJsInstance } from './core/types'
