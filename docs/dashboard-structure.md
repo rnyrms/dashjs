@@ -214,7 +214,7 @@ const dashboard = {
 }
 
 import dashjs from 'dashjs'
-dashjs(document.getElementById('app'), { mode: 'viewer', dashboard })
+dashjs(document.getElementById('app'), { dashboard })
 ```
 
 
@@ -234,5 +234,5 @@ const onSave = async (dashboard) => {
 
 // Load
 const dashboard = await fetch('/api/dashboards/1').then(r => r.json())
-dashjs(element, { mode: 'editor', dashboard, onSave })
+dashjs(element, { dashboard, onSave })
 ```

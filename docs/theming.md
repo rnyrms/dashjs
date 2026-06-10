@@ -53,7 +53,7 @@ This sets `data-dashjs-theme="dark"` on the container. The dark theme redefines 
 Switching theme at runtime:
 
 ```javascript
-const instance = dashjs(element, { mode: 'editor' })
+const instance = dashjs(element)
 
 // Toggle dark mode
 element.setAttribute('data-dashjs-theme', 'dark')
@@ -94,10 +94,10 @@ Modals and overlays appended to `document.body` outside the container receive th
 ```
 
 ```javascript
-dashjs(document.getElementById('my-dashboard'), { mode: 'editor' })
+dashjs(document.getElementById('my-dashboard'))
 ```
 
-### Fully custom theme (both modes)
+### Fully custom theme (light and dark)
 
 ```css
 [data-dashjs] {

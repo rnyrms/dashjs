@@ -7,7 +7,7 @@ canonical: https://dashjs.com/docs/filters
 
 Dashjs supports two levels of filtering: **dashboard-level filters** that apply to every chart whose dimension matches the filter's field, and **chart-level filters** that narrow only one specific chart. Both are stored in `DashboardFilter` objects and are passed together to `DashJsDataSource.getChartData()`.
 
-On-canvas **control widgets** (dropdown, multiselect, date range) let the viewer interact with filters without opening the editor.
+On-canvas **control widgets** (dropdown, multiselect, date range) let users adjust filters directly on the canvas, without opening a chart's property panel.
 
 
 ## Documentation
@@ -42,13 +42,13 @@ When `getChartData()` is called, Dashjs merges:
 1. `DashboardFull.filters` — dashboard-level filters
 2. `DashboardChartRecord.dashboard_chart_config.filters` — chart-level filters
 
-The merged array is passed as the second argument to `getChartData()`. The host is responsible for applying them to its query. If you use the built-in mock data path (no custom `DashJsDataSource`), Dashjs applies them automatically by matching `filter.fieldId` against the chart's dimension field.
+The merged array is passed as the second argument to `getChartData()`. The host is responsible for applying them to its query. If you use imported data instead of a custom `DashJsDataSource`, Dashjs applies them automatically by matching `filter.fieldId` against the chart's dimension field.
 
 Only filters whose `fieldId` matches a chart's **dimension** affect that chart. Filters for fields not used as the dimension are silently ignored for that chart.
 
 ### On-canvas controls
 
-Controls are interactive widgets placed on the dashboard canvas alongside charts. When the viewer changes a control's value, Dashjs updates the matching filter and re-renders all affected charts.
+Controls are interactive widgets placed on the dashboard canvas alongside charts. When the user changes a control's value, Dashjs updates the matching filter and re-renders all affected charts.
 
 ```typescript
 interface DashboardControlRecord {
@@ -97,7 +97,7 @@ const dashboard = {
   ],
 }
 
-dashjs(element, { mode: 'viewer', dashboard })
+dashjs(element, { dashboard })
 ```
 
 ### Chart-level filter

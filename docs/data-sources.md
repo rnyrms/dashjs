@@ -5,7 +5,7 @@ canonical: https://dashjs.com/docs/data-sources
 
 # Data Sources
 
-By default Dashjs renders charts using built-in mock data. To power dashboards with real data, implement the `DashJsDataSource` interface and pass it via `options.dataSource`. Dashjs calls `listFields()` to populate the field catalogue shown in the editor, and `getChartData()` each time a chart's slot configuration or filter changes.
+To power dashboards with real data, implement the `DashJsDataSource` interface and pass it via `options.dataSource`. Dashjs calls `listFields()` to populate the field catalogue shown in the editor, and `getChartData()` each time a chart's slot configuration or filter changes. Without a data source, the field catalogue starts empty and is filled by importing a data file (see [Import Data](/docs/import-data)).
 
 Both methods can be synchronous or async.
 
@@ -125,7 +125,6 @@ const dataSource = {
 }
 
 dashjs(document.getElementById('app'), {
-  mode: 'editor',
   dataSource,
 })
 ```
@@ -187,7 +186,6 @@ const dataSource = {
 }
 
 dashjs(document.getElementById('dashboard'), {
-  mode: 'editor',
   dataSource,
 })
 ```

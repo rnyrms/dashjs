@@ -19,22 +19,16 @@ function dashjs(element: HTMLElement, options?: DashJsOptions): DashJsInstance
 | `element` | `HTMLElement` | Container element. Dashjs adds `data-dashjs` to it for CSS scoping. |
 | `options` | `DashJsOptions` | Optional configuration object |
 
-Returns a `DashJsInstance`.
+Mounts the dashboard editor into `element` and returns a `DashJsInstance`.
 
 
 ## DashJsOptions
 
 ```typescript
 interface DashJsOptions {
-  mode?:        DashJsMode
-  dashboards?:  DashboardRecord[]
   dashboard?:   DashboardFull
-  api?:         Partial<DashJsApi>
   theme?:       'light' | 'dark'
   dictionary?:  Record<string, string>
-  onCreate?:    (dashboard: DashboardRecord) => void
-  onOpen?:      (dashboard: DashboardRecord) => void
-  onDelete?:    (id: number) => void
   onSave?:      (dashboard: DashboardFull) => void | Promise<void>
   dataSource?:  DashJsDataSource
 }
@@ -42,17 +36,11 @@ interface DashJsOptions {
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `mode` | `DashJsMode` | `'list'` | Initial render mode |
-| `dashboards` | `DashboardRecord[]` | `[]` | Pre-loaded dashboards for `list` mode |
-| `dashboard` | `DashboardFull` | built-in stub | Dashboard to open in `editor` or `viewer` mode |
-| `api` | `Partial<DashJsApi>` | — | REST adapter for the list page |
+| `dashboard` | `DashboardFull` | new empty dashboard | Dashboard to load into the editor |
 | `theme` | `'light' \| 'dark'` | `'light'` | Color theme |
 | `dictionary` | `Record<string, string>` | — | i18n overrides; missing keys fall back to English |
-| `onCreate` | function | — | Called after a dashboard is created |
-| `onOpen` | function | — | Called when the user opens a dashboard |
-| `onDelete` | function | — | Called after a dashboard is deleted |
-| `onSave` | function | — | Called when the user saves in editor mode |
-| `dataSource` | `DashJsDataSource` | built-in mocks | Live data adapter for fields and chart series |
+| `onSave` | function | — | Called when the user saves; receives a deep clone |
+| `dataSource` | `DashJsDataSource` | — | Live data adapter for fields and chart series. Without it, the field catalogue starts empty and is filled by importing a data file |
 
 
 ## DashJsInstance
@@ -61,26 +49,13 @@ The object returned by the factory function:
 
 ```typescript
 interface DashJsInstance {
-  setMode:       (mode: DashJsMode) => void
-  getMode:       () => DashJsMode
-  setDashboards: (rows: DashboardRecord[]) => void
-  destroy:       () => void
+  destroy: () => void
 }
 ```
 
 | Method | Description |
 |--------|-------------|
-| `setMode(mode)` | Switch the rendered page without reinitializing the container |
-| `getMode()` | Return the current mode string |
-| `setDashboards(rows)` | Replace the dashboard list in `list` mode without a full remount |
 | `destroy()` | Remove all DOM, event listeners, Highcharts instances, and GridStack |
-
-
-## DashJsMode
-
-```typescript
-type DashJsMode = 'list' | 'editor' | 'viewer' | 'public' | 'auth'
-```
 
 
 ## DashJsDataSource
@@ -96,17 +71,6 @@ interface DashJsDataSource {
 ```
 
 See [Data Sources](/docs/data-sources) for implementation details.
-
-
-## DashJsApi
-
-```typescript
-interface DashJsApi {
-  listDashboards:  () => Promise<DashboardRecord[]>
-  createDashboard: (data: { dashboard_name: string; survey_id?: number }) => Promise<DashboardRecord>
-  deleteDashboard: (id: number) => Promise<void>
-}
-```
 
 
 ## DataField

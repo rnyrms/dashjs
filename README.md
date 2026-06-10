@@ -6,9 +6,9 @@ Jspreadsheet — with [Highcharts](https://www.highcharts.com/) for chart
 rendering and [Lucide](https://lucide.dev/) for icons. Inspired by Looker
 Studio's UX.
 
-> **Status: early.** Vanilla TS rewrite in progress. Editor mode (drag/resize
-> grid, multi-page, chart picker, properties panel, filters) works against
-> mock data. Real data-source integration, save/publish, and Style tab are
+> **Status: early.** Vanilla TS rewrite in progress. The editor (drag/resize
+> grid, multi-page, chart picker, properties panel, filters, Style tab,
+> `dataSource` adapter, `onSave`) works. Publish and framework adapters are
 > still ahead.
 
 ## Why dashjs
@@ -23,7 +23,6 @@ way — it has no host-framework dependency. Mount it on a `<div>`:
   import 'dashjs/styles'
 
   const instance = dashjs(document.getElementById('app'), {
-    mode: 'editor',
     dashboard: {
       dashboard_id: 1,
       dashboard_name: 'Q1 results',
@@ -43,7 +42,7 @@ way — it has no host-framework dependency. Mount it on a `<div>`:
 
 ## What it does today
 
-- **Editor mode** (`mode: 'editor'`) — Looker-Studio-inspired UI:
+- **Editor** — Looker-Studio-inspired UI:
   - Top: menu bar shell, toolbar, filter bar
   - Center: 12-column drag/resize canvas (gridstack.js) with multi-page tabs
     at the bottom
@@ -72,9 +71,8 @@ way — it has no host-framework dependency. Mount it on a `<div>`:
   Saving… → Saved feedback)
 - **Live data source**: optional `dataSource: { listFields, getChartData }`
   adapter — when provided, the editor fetches the field catalogue + per-chart
-  data via the host's callbacks instead of using mocks. Per-chart loading
-  placeholder; stale-response token guard so quick config changes don't
-  race
+  data via the host's callbacks. Per-chart loading placeholder;
+  stale-response token guard so quick config changes don't race
 - **Drag fields onto charts**: drag any field from the Data panel and drop
   it on a chart to set that chart's dimension
 - **Light/dark theming** via CSS custom properties (no MUI runtime overhead)
@@ -83,7 +81,8 @@ way — it has no host-framework dependency. Mount it on a `<div>`:
 
 - Publish / Slug check (host receives the dashboard via `onSave`; dashjs
   itself doesn't persist)
-- KPI / Aggregation re-computation when filters apply (mock can't re-aggregate)
+- KPI / Aggregation re-computation when filters apply (embedded series can't
+  re-aggregate — needs a `dataSource`)
 - Page rename / delete via right-click
 - Gauge and radar chart types (need Highcharts-more module)
 
@@ -95,21 +94,19 @@ See the roadmap below for the planned phases.
 src/
 ├── index.ts                       # public API: dashjs(element, options)
 ├── core/
-│   ├── Dashboard.ts               # mode dispatcher (list / editor / viewer)
+│   ├── Dashboard.ts               # top-level controller (lifecycle + instance API)
 │   ├── pages/
-│   │   ├── DashboardEditor.ts     # the editor UI + state
-│   │   ├── DashboardViewer.ts     # read-only viewer
-│   │   └── DashboardList.ts       # dashboard listing (placeholder)
+│   │   └── DashboardEditor.ts     # the editor UI + state
 │   ├── charts/
 │   │   ├── renderChart.ts         # factory dispatching by type
 │   │   ├── defaults.ts            # default chart factory for "Add a chart"
-│   │   ├── applyFilters.ts        # mock-data filter helper
+│   │   ├── applyFilters.ts        # embedded-series filter helper
 │   │   └── palette.ts             # default color palette
+│   ├── data/                      # data file import (Jspreadsheet JSON, TabularJS)
 │   ├── widgets/                   # small jSuites wrappers (modal, etc.)
 │   ├── icons.ts                   # Lucide icon helper
 │   ├── domain.ts                  # domain types
-│   ├── types.ts                   # public option / instance types
-│   └── mockData.ts                # mock fields + demo dashboard
+│   └── types.ts                   # public option / instance types
 └── styles/
     └── dashjs.css                 # all CSS, scoped under [data-dashjs]
 ```
@@ -118,15 +115,12 @@ The factory function returns an imperative instance:
 
 ```ts
 interface DashJsInstance {
-  setMode: (mode: 'list' | 'editor' | 'viewer') => void
-  getMode: () => DashJsMode
-  setDashboards: (rows: DashboardRecord[]) => void
   destroy: () => void
 }
 ```
 
 Edits inside the editor mutate a deep-cloned copy of the input dashboard; the
-public `onSave` callback (Phase E) will emit the updated dashboard JSON.
+`onSave` callback emits the updated dashboard JSON.
 
 ## Local development
 
