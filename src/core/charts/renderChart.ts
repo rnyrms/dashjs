@@ -93,6 +93,44 @@ function commonOptions(chart: DashboardChartRecord): Partial<Highcharts.Options>
     chart: { backgroundColor: 'transparent' },
     title: { text: undefined },
     credits: { enabled: false },
+    // Conditions test the chart box (not the viewport) and re-evaluate on
+    // Highcharts' built-in container reflow, so these kick in live while a
+    // gridstack card is being resized. Rules only ever turn chrome OFF —
+    // charts that already disable a legend stay as configured.
+    responsive: {
+      rules: [
+        {
+          condition: { maxWidth: 280 },
+          chartOptions: { legend: { enabled: false } },
+        },
+        {
+          condition: { maxHeight: 200 },
+          chartOptions: { legend: { enabled: false } },
+        },
+        {
+          condition: { maxWidth: 220 },
+          chartOptions: {
+            xAxis: { labels: { enabled: false } },
+            yAxis: { labels: { enabled: false } },
+            plotOptions: {
+              series: { dataLabels: { enabled: false } },
+              // The data label IS the gauge's value readout — keep it.
+              solidgauge: { dataLabels: { enabled: true } },
+            },
+          },
+        },
+        {
+          condition: { maxHeight: 160 },
+          chartOptions: {
+            xAxis: { labels: { enabled: false } },
+            plotOptions: {
+              series: { dataLabels: { enabled: false } },
+              solidgauge: { dataLabels: { enabled: true } },
+            },
+          },
+        },
+      ],
+    },
   }
 }
 
@@ -654,7 +692,9 @@ function renderGauge(el: HTMLElement, chart: DashboardChartRecord): ChartHandle 
           y: -20,
           borderWidth: 0,
           useHTML: true,
-          format: `<div style="text-align:center;font-size:24px;font-weight:700;color:var(--dashjs-text)">{y}</div>`,
+          // cqmin resolves against the dashjs-card query container, so the
+          // readout scales down with the card instead of overflowing it.
+          format: `<div style="text-align:center;font-size:clamp(13px, 12cqmin, 24px);font-weight:700;color:var(--dashjs-text)">{y}</div>`,
         },
       },
     },

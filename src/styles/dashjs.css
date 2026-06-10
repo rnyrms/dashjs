@@ -362,6 +362,11 @@
   right: 6px;
   bottom: 6px;
   left: 6px;
+  /* Query container for the adaptive-chrome rules below. Full `size`
+     containment (not just inline-size) is safe here because the element
+     gets explicit width AND height from the absolute insets — and we need
+     it, since the header must also react to the card getting short. */
+  container: dashjs-card / size;
 }
 /* Chart cards: the box-shadow selection ring lives just outside the
    inner item-content. The outer item carries `.dashjs-card` whose
@@ -383,6 +388,81 @@
 .dashjs-card--chart .grid-stack-item-content:hover {
   border-color: var(--dashjs-text-muted);
 }
+
+/* ── Resize handle bars ─────────────────────────────────────────────────
+   GridStack renders only e / s / se handles (set in initGrid).
+   Indicators sit ~8px inside the card border and fade in on card hover.
+   Corner uses an L-shape (right + bottom borders) instead of a dot. */
+
+[data-dashjs] .grid-stack-item > .ui-resizable-se {
+  background-image: none;
+  transform: none;
+}
+
+/* Bottom: horizontal pill — 8px inside the card's bottom border */
+[data-dashjs] .grid-stack-item > .ui-resizable-s::before {
+  content: '';
+  position: absolute;
+  width: 36px;
+  height: 4px;
+  left: 50%;
+  bottom: 9px;
+  transform: translateX(-50%);
+  border-radius: 3px;
+  background: rgba(200, 205, 215, 0.78);
+  opacity: 0;
+  transition: opacity 150ms ease, background 150ms ease;
+  pointer-events: none;
+}
+
+/* Right: vertical pill — 8px inside the card's right border */
+[data-dashjs] .grid-stack-item > .ui-resizable-e::before {
+  content: '';
+  position: absolute;
+  width: 4px;
+  height: 36px;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  background: rgba(200, 205, 215, 0.78);
+  opacity: 0;
+  transition: opacity 150ms ease, background 150ms ease;
+  pointer-events: none;
+}
+
+/* Corner: L-shape (right + bottom borders) — 8px inside both card edges */
+[data-dashjs] .grid-stack-item > .ui-resizable-se::before {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  right: 9px;
+  bottom: 9px;
+  background: transparent;
+  border-right: 3px solid rgba(200, 205, 215, 0.78);
+  border-bottom: 3px solid rgba(200, 205, 215, 0.78);
+  border-radius: 0 0 3px 0;
+  opacity: 0;
+  transition: opacity 150ms ease, border-color 150ms ease;
+  pointer-events: none;
+}
+
+/* Fade in on card hover */
+[data-dashjs] .grid-stack-item:hover > .ui-resizable-s::before,
+[data-dashjs] .grid-stack-item:hover > .ui-resizable-e::before,
+[data-dashjs] .grid-stack-item:hover > .ui-resizable-se::before {
+  opacity: 1;
+}
+
+/* Brighten on direct handle hover */
+[data-dashjs] .grid-stack-item > .ui-resizable-s:hover::before,
+[data-dashjs] .grid-stack-item > .ui-resizable-e:hover::before {
+  background: rgba(225, 228, 238, 0.95);
+}
+[data-dashjs] .grid-stack-item > .ui-resizable-se:hover::before {
+  border-color: rgba(225, 228, 238, 0.95);
+}
 .dashjs-card--chart.is-selected .grid-stack-item-content {
   border-color: var(--dashjs-accent);
   box-shadow: 0 0 0 2px var(--dashjs-accent);
@@ -402,6 +482,11 @@
 .dashjs-card__body[data-chart-body] > * {
   flex: 1;
   min-height: 0;
+}
+
+/* KPI value scales with the card (cqmin = 1% of the card's smaller side). */
+[data-dashjs] .grid-stack .dashjs-kpi__value {
+  font-size: clamp(16px, 16cqmin, 36px);
 }
 
 /* --- Control widgets ----------------------------------------------- */
@@ -1155,6 +1240,10 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--dashjs-text);
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .dashjs-card__body {
   padding: 12px;
@@ -1406,4 +1495,45 @@
   opacity: 0.45;
   cursor: not-allowed;
   pointer-events: none;
+}
+
+/* ── Adaptive card chrome ───────────────────────────────────────────────
+   Cards adapt to their own size (not the viewport) via the dashjs-card
+   query container declared on the gridstack item-content. Two steps,
+   following the compact-panel pattern of Grafana/Datadog:
+   1. medium-small → header shrinks;
+   2. small → header collapses into a hover overlay (Grafana's "hover
+      header"), freeing its full height for the chart while keeping the
+      title discoverable.
+   Must stay at the end of the file with [data-dashjs]-prefixed selectors:
+   @container adds no specificity, so these rules need both source order
+   and specificity to beat the base .dashjs-card__title definition. */
+@container dashjs-card (max-width: 420px) or (max-height: 220px) {
+  [data-dashjs] .dashjs-card__title {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+}
+@container dashjs-card (max-width: 240px) or (max-height: 140px) {
+  [data-dashjs] .dashjs-card__title {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    background: var(--dashjs-bg);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+  }
+  [data-dashjs] .grid-stack-item-content:hover > .dashjs-card__title {
+    opacity: 0.95;
+  }
+  [data-dashjs] .dashjs-card__body[data-chart-body] {
+    padding: 4px 6px;
+  }
+  [data-dashjs] .dashjs-control__body {
+    padding: 4px 6px;
+    gap: 4px;
+  }
 }
